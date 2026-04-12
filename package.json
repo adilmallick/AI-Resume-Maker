@@ -1,0 +1,9 @@
+{
+  "name": "project-root",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "cd frontend && npm run dev",
+    "install": "cd frontend && npm install",
+    "build": "cd frontend && npm run build"
+  }
+}
