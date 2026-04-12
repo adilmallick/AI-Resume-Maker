@@ -109,6 +109,3 @@ Project/
         └── types/
             └── job.ts       # TypeScript type definitions
 ```
-# AI-Resume-Maker
-# AI-Resume-Maker
-# AI-Resume-Maker
