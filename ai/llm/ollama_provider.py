@@ -5,7 +5,7 @@ from ai.interfaces.llm_provider import LLMProvider
 logger = logging.getLogger(__name__)
 
 class OllamaProvider(LLMProvider):
-    def __init__(self, endpoint: str = "http://localhost:11434/api/generate", model: str = "deepseek-coder:1.3b"):
+    def __init__(self, endpoint: str = "http://localhost:11434/api/generate", model: str = "llama3.1:8b"):
         self.endpoint = endpoint
         self.model = model
 

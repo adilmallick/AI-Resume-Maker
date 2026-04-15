@@ -36,4 +36,4 @@ The application uses a **Client-Server Architecture** heavily decoupled into thr
 - **Frontend Framework**: Next.js (App Router), React, Vanilla CSS.
 - **Backend Framework**: Python 3.10+, FastAPI, Uvicorn.
 - **Crawlers**: BeautifulSoup4, Playwright.
-- **AI Tooling**: LangChain, Local Ollama (`deepseek-coder:1.3b` + `nomic-embed-text`).
+- **AI Tooling**: LangChain, Local Ollama (`llama3.1:8b` + `nomic-embed-text`).

@@ -86,7 +86,7 @@ export default function Home() {
       {status === "loading" && (
         <div className="status-pill">
           <span className="pulse-dot" />
-          Running LangChain chain with deepseek-coder:1.3b via Ollama…
+          Running LangChain chain with llama3.1:8b via Ollama…
         </div>
       )}
 
@@ -111,7 +111,7 @@ export default function Home() {
 
       {/* Footer */}
       <footer className="footer">
-        Built with LangChain + Ollama (deepseek-coder:1.3b) + Next.js
+        Built with LangChain + Ollama (llama3.1:8b) + Next.js
       </footer>
     </main>
   );

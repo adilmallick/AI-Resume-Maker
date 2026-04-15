@@ -38,7 +38,7 @@ graph TD
 To ensure the business logic is entirely decoupled from the underlying Large Language Model or third-party service logic, the core enforces strict object-oriented inheritance.
 
 - **`LLMProvider`**: An abstract python class that mandates a single function contract: `generate(prompt: str) -> str`.
-- **`OllamaProvider`**: The concrete class currently running the application. It bypasses any heavyweight `langchain` logic directly pointing standard `requests` payloads at `http://localhost:11434/api/generate` relying statically on `deepseek-coder:1.3b`.
+- **`OllamaProvider`**: The concrete class currently running the application. It bypasses any heavyweight `langchain` logic directly pointing standard `requests` payloads at `http://localhost:11434/api/generate` relying statically on `llama3.1:8b`.
 - **`OpenAIProvider`**: A mapped but disabled architecture scaffolding allowing seamless migration to zero-shot models utilizing API keys if later requested.
 
 ---

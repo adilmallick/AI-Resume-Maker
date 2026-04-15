@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { generateResume } from "@/lib/api";
+import { generateResume, downloadResumePdf } from "@/lib/api";
 
 interface ResumeGeneratorProps {
   jobUrl: string;
@@ -12,6 +12,8 @@ export default function ResumeGenerator({ jobUrl }: ResumeGeneratorProps) {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [bullets, setBullets] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [pdfStatus, setPdfStatus] = useState<"idle" | "loading" | "error">("idle");
+  const [pdfError, setPdfError] = useState<string | null>(null);
 
   async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
@@ -35,6 +37,18 @@ export default function ResumeGenerator({ jobUrl }: ResumeGeneratorProps) {
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Unexpected error during generation.");
       setStatus("error");
+    }
+  }
+
+  async function handleDownloadPdf() {
+    setPdfStatus("loading");
+    setPdfError(null);
+    try {
+      await downloadResumePdf(bullets);
+      setPdfStatus("idle");
+    } catch (err: unknown) {
+      setPdfError(err instanceof Error ? err.message : "Failed to generate PDF.");
+      setPdfStatus("error");
     }
   }
 
@@ -82,6 +96,23 @@ export default function ResumeGenerator({ jobUrl }: ResumeGeneratorProps) {
               <li key={i}>{b}</li>
             ))}
           </ul>
+
+          <div style={{ marginTop: "1.25rem" }}>
+            <button
+              id="download-pdf-btn"
+              className={`generate-bullets-btn ${pdfStatus === "loading" ? "loading" : ""}`}
+              onClick={handleDownloadPdf}
+              disabled={pdfStatus === "loading"}
+            >
+              {pdfStatus === "loading" ? "Compiling PDF…" : "⬇️ Download Resume PDF"}
+            </button>
+
+            {pdfStatus === "error" && pdfError && (
+              <div className="error-message" style={{ marginTop: "0.75rem" }}>
+                ⚠️ {pdfError}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

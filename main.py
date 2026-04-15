@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from pdf.router import router as pdf_router
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from scraper.extractor import extract_job_info
@@ -9,9 +10,12 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Job Scraper API",
-    description="Extracts structured job information from any job listing URL using LangChain + Ollama (deepseek-coder:1.3b)",
-    version="1.0.0",
+    title="AI Resume Maker API",
+    description=(
+        "Extracts structured job information from any job listing URL using LangChain + Ollama, "
+        "generates ATS-optimized resume bullet points, and compiles them into a PDF via pdflatex."
+    ),
+    version="2.0.0",
 )
 
 # Allow Next.js dev server
@@ -22,6 +26,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── Routers ────────────────────────────────────────────────────────────────
+app.include_router(pdf_router)
 
 
 class ScrapeRequest(BaseModel):
@@ -36,7 +43,7 @@ class ScrapeResponse(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": "deepseek-coder:1.3b", "provider": "ollama"}
+    return {"status": "ok", "model": "llama3.1:8b", "provider": "ollama"}
 
 
 @app.post("/scrape", response_model=ScrapeResponse)
@@ -64,7 +71,7 @@ from ai.rag.vector_store import InMemoryVectorStore
 from ai.rag.retriever import RAGRetriever
 from ai.pipeline import ResumePipeline
 
-llm_provider = OllamaProvider(model="deepseek-coder:1.3b")
+llm_provider = OllamaProvider(model="llama3.1:8b")
 embeddings = OllamaEmbeddings(model="nomic-embed-text")
 vector_store = InMemoryVectorStore(embeddings)
 retriever = RAGRetriever(vector_store)

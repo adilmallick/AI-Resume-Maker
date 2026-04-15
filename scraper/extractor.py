@@ -172,7 +172,7 @@ prompt = PromptTemplate(
 
 def _get_llm() -> OllamaLLM:
     """Create LLM lazily so the server doesn't crash if Ollama is not running at startup."""
-    return OllamaLLM(model="deepseek-coder:1.3b", temperature=0)
+    return OllamaLLM(model="llama3.1:8b", temperature=0)
 
 
 def _parse_json_from_response(text: str) -> dict:
@@ -210,7 +210,7 @@ def extract_job_info(url: str) -> dict:
     page_text = fetch_page(url)
     llm = _get_llm()
     chain = prompt | llm
-    logger.info("Running LangChain chain with deepseek-coder:1.3b...")
+    logger.info("Running LangChain chain with llama3.1:8b...")
     # Keep to 3500 chars — 1.3b models perform poorly on very long contexts
     raw_output = chain.invoke({"page_content": page_text[:3500]})
     result = _parse_json_from_response(raw_output)
@@ -222,7 +222,7 @@ def extract_from_text(text: str, source_url: str = "pasted-text") -> dict:
     """Extract job info directly from pasted text — no browser fetch needed."""
     llm = _get_llm()
     chain = prompt | llm
-    logger.info("Extracting from pasted text with deepseek-coder:1.3b...")
+    logger.info("Extracting from pasted text with llama3.1:8b...")
     raw_output = chain.invoke({"page_content": text[:3500]})
     result = _parse_json_from_response(raw_output)
     result["source_url"] = source_url

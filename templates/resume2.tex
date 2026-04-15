@@ -1,0 +1,63 @@
+\documentclass[10pt,letterpaper]{article}
+
+% ── Packages ──────────────────────────────────────────────────────────────
+\usepackage[
+  top=0.55in, bottom=0.55in,
+  left=0.65in, right=0.65in
+]{geometry}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{hyperref}
+\usepackage{parskip}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+
+% ── Typography ─────────────────────────────────────────────────────────────
+\hypersetup{colorlinks=true, urlcolor=blue, hidelinks}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{3pt}
+
+% ── Section formatting ─────────────────────────────────────────────────────
+\titleformat{\section}
+  {\large\bfseries\uppercase}
+  {}{0em}{}
+  [\titlerule]
+\titlespacing{\section}{0pt}{8pt}{4pt}
+
+% ── Custom commands ─────────────────────────────────────────────────────────
+\newcommand{\resumeitem}[1]{\item #1}
+
+% ═══════════════════════════════════════════════════════════════════════════
+\begin{document}
+\pagestyle{empty}
+
+% ── Header ─────────────────────────────────────────────────────────────────
+\begin{center}
+  {\LARGE\bfseries {{CANDIDATE_NAME}}}\\[4pt]
+  {{CANDIDATE_EMAIL}} \quad|\quad {{CANDIDATE_PHONE}} \quad|\quad {{CANDIDATE_LOCATION}}
+\end{center}
+
+% ── Professional Summary ────────────────────────────────────────────────────
+\section{Professional Summary}
+{{SUMMARY}}
+
+% ── Experience ──────────────────────────────────────────────────────────────
+\section{Experience}
+
+\textbf{{{JOB_TITLE}}} \hfill {{JOB_DATE_RANGE}}\\
+\textit{{{COMPANY_NAME}}} \hfill {{JOB_LOCATION}}
+
+\begin{itemize}[leftmargin=*, itemsep=1pt, topsep=3pt, parsep=0pt]
+{{EXPERIENCE_POINTS}}
+\end{itemize}
+
+% ── Skills ──────────────────────────────────────────────────────────────────
+\section{Skills}
+{{SKILLS_LIST}}
+
+% ── Education ───────────────────────────────────────────────────────────────
+\section{Education}
+\textbf{{{DEGREE}}} \hfill {{EDUCATION_DATE_RANGE}}\\
+\textit{{{INSTITUTION}}}
+
+\end{document}

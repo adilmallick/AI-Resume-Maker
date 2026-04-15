@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 export const metadata: Metadata = {
   title: "Job Info Extractor | LangChain + Ollama",
   description:
-    "AI-powered job listing scraper using LangChain and deepseek-coder:1.3b via Ollama. Extract structured job information from any URL.",
+    "AI-powered job listing scraper using LangChain and llama3.1:8b via Ollama. Extract structured job information from any URL.",
 };
 
 export default function RootLayout({
