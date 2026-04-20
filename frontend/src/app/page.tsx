@@ -1,118 +1,114 @@
 "use client";
 
 import { useState } from "react";
-import { scrapeJob } from "@/lib/api";
-import { JobInfo } from "@/types/job";
-import JobCard from "@/components/JobCard";
-
-type Status = "idle" | "loading" | "success" | "error";
+import { useAuth } from '@/contexts/AuthContext';
+import Link from 'next/link';
 
 export default function Home() {
+  const { token, user } = useAuth();
   const [url, setUrl] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
-  const [job, setJob] = useState<JobInfo | null>(null);
+  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleGenerate(e: React.FormEvent) {
     e.preventDefault();
     if (!url.trim()) return;
 
+    if (!token) {
+        setError("You must be logged in to generate a resume.");
+        return;
+    }
+
     setStatus("loading");
-    setJob(null);
     setError(null);
 
     try {
-      const result = await scrapeJob(url.trim());
-      if (result.success && result.data) {
-        setJob(result.data);
-        setStatus("success");
-      } else {
-        setError(result.error || "Failed to extract job information.");
-        setStatus("error");
+      const res = await fetch("http://localhost:8000/generate-resume", {
+        method: 'POST',
+        headers: { 
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ job_url: url.trim() })
+      });
+
+      if (!res.ok) {
+          throw new Error("Failed to generate resume.");
       }
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Unexpected error.");
+
+      const blob = await res.blob();
+      const downloadUrl = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = downloadUrl;
+      a.download = `Resume_${user?.id?.slice(0,5)}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      
+      setStatus("success");
+    } catch (err: any) {
+      setError(err.message || "Failed to generate resume.");
       setStatus("error");
     }
   }
 
   return (
-    <main className="main">
-      {/* Hero Header */}
-      <header className="hero">
-        <div className="hero-badge">AI-Powered</div>
-        <h1 className="hero-title">
-          Job Info <span className="gradient-text">Extractor</span>
+    <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 160px)' }}>
+      
+      <div style={{ textAlign: 'center', maxWidth: '800px', marginBottom: '40px' }}>
+        <h1 className="title-main" style={{ fontSize: 'clamp(3rem, 5vw, 4.5rem)', marginBottom: '16px' }}>
+          Next-Gen AI <span className="text-gradient">Resumes</span>
         </h1>
-        <p className="hero-sub">
-          Paste any job listing URL and let{" "}
-          <strong>deepseek-coder via Ollama</strong> extract structured
-          information instantly.
+        <p className="title-sub" style={{ fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto' }}>
+          Stop tweaking templates. Input your vault once. Let our private AI pull exactly what matters and generate an ATS-bypassing PDF instantly.
         </p>
-      </header>
+      </div>
 
-      {/* Search Form */}
-      <form onSubmit={handleSubmit} className="search-form glass-card">
-        <div className="input-wrap">
-          <span className="input-icon">🔗</span>
-          <input
-            type="url"
-            className="url-input"
-            placeholder="https://jobs.example.com/job-listing"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            required
-            disabled={status === "loading"}
-            id="url-input"
-          />
-        </div>
-        <button
-          type="submit"
-          className={`extract-btn ${status === "loading" ? "loading" : ""}`}
-          disabled={status === "loading" || !url.trim()}
-          id="extract-btn"
-        >
-          {status === "loading" ? (
-            <>
-              <span className="spinner" /> Extracting…
-            </>
-          ) : (
-            "Extract Job Info ⚡"
-          )}
-        </button>
-      </form>
-
-      {/* Status Info */}
-      {status === "loading" && (
-        <div className="status-pill">
-          <span className="pulse-dot" />
-          Running LangChain chain with llama3.1:8b via Ollama…
-        </div>
-      )}
-
-      {/* Error State */}
-      {status === "error" && error && (
-        <div className="error-card glass-card" role="alert">
-          <span className="error-icon">⚠️</span>
-          <div>
-            <strong>Extraction Failed</strong>
-            <p>{error}</p>
-            {(error.includes("bot protection") || error.includes("Akamai") || error.includes("blocked")) && (
-              <p style={{ marginTop: "10px", fontSize: "0.85rem", color: "#a78bfa" }}>
-                💡 <strong>Try these instead:</strong> Greenhouse, Lever, Workday, or Wellfound job URLs work great.
-              </p>
-            )}
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '650px', padding: '32px' }}>
+        <form onSubmit={handleGenerate}>
+          <div className="form-group" style={{ marginBottom: '20px' }}>
+            <label className="form-label" style={{ fontSize: '1rem', color: 'white' }}>Target Job Listing URL</label>
+            <input
+              type="url"
+              className="form-input"
+              style={{ fontSize: '1.1rem', padding: '16px 20px' }}
+              placeholder="https://jobs.example.com/job-listing"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              required
+              disabled={status === "loading" || !token}
+            />
           </div>
-        </div>
-      )}
+          
+          {!token ? (
+              <div className="alert alert-error" style={{ justifyContent: 'center', gap: '8px' }}>
+                  You must <Link href="/login" className="btn-link" style={{ fontWeight: 'bold' }}>Login</Link> or <Link href="/signup" className="btn-link" style={{ fontWeight: 'bold' }}>Sign Up</Link> to generate tailored resumes.
+              </div>
+          ) : (
+              <button
+                type="submit"
+                className="btn btn-primary"
+                style={{ width: '100%', fontSize: '1.1rem', padding: '16px' }}
+                disabled={status === "loading" || !url.trim()}
+              >
+              {status === "loading" ? "Analyzing Vault & Synthesizing PDF..." : "Generate Masterpiece ⚡"}
+              </button>
+          )}
+        </form>
 
-      {/* Result */}
-      {status === "success" && job && <JobCard job={job} />}
+        {status === "error" && error && (
+          <div className="alert alert-error" style={{ marginTop: '20px', marginBottom: 0 }}>
+            {error}
+          </div>
+        )}
 
-      {/* Footer */}
-      <footer className="footer">
-        Built with LangChain + Ollama (llama3.1:8b) + Next.js
-      </footer>
-    </main>
+        {status === "success" && (
+          <div className="alert alert-success" style={{ marginTop: '20px', marginBottom: 0 }}>
+            <strong>Success!</strong> Your PDF has been compiled and downloaded securely!
+          </div>
+        )}
+      </div>
+
+    </div>
   );
 }

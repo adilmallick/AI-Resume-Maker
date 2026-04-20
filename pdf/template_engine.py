@@ -33,16 +33,12 @@ ALLOWED_PLACEHOLDERS: frozenset[str] = frozenset(
         "CANDIDATE_EMAIL",
         "CANDIDATE_PHONE",
         "CANDIDATE_LOCATION",
-        "SUMMARY",
-        "JOB_TITLE",
-        "JOB_DATE_RANGE",
-        "COMPANY_NAME",
-        "JOB_LOCATION",
-        "EXPERIENCE_POINTS",  # pre-formatted \item lines
-        "SKILLS_LIST",
-        "DEGREE",
-        "EDUCATION_DATE_RANGE",
-        "INSTITUTION",
+        "SOCIAL_LINKS_BLOCK",
+        "SUMMARY_BLOCK",
+        "EXPERIENCES_BLOCK",
+        "PROJECTS_BLOCK",
+        "EDUCATION_BLOCK",
+        "SKILLS_BLOCK"
     }
 )
 

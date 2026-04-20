@@ -34,46 +34,51 @@ router = APIRouter(tags=["PDF Generation"])
 
 # ── Request / Response schemas ─────────────────────────────────────────────
 
+class Experience(BaseModel):
+    company: str
+    title: str
+    dates: str
+    location: str = ""
+    bullets: list[str]
+
+class Project(BaseModel):
+    title: str
+    role: str = ""
+    dates: str = ""
+    tech_stack: str = ""
+    repository_url: str = ""
+    live_demo_url: str = ""
+    bullets: list[str]
+
+class Education(BaseModel):
+    institution: str
+    degree: str
+    dates: str
+
+class SkillCategory(BaseModel):
+    category: str
+    skills: list[str]
+
+class SocialLink(BaseModel):
+    platform_name: str
+    url: str
+    display_text: str = ""
+
 class ResumePDFRequest(BaseModel):
     """
-    Structured resume data supplied by the AI pipeline.
-
-    Every field is individually sanitized before template injection.
-    The ``bullets`` list becomes the ``EXPERIENCE_POINTS`` block.
+    Structured dynamic resume data.
     """
-
-    bullets: list[str] = Field(
-        ...,
-        min_length=1,
-        description="ATS-optimized resume experience bullet points.",
-        examples=[["Led team of 5 engineers", "Reduced latency by 40%"]],
-    )
-
-    # Optional header fields — sensible defaults keep the template valid
-    # even when the AI only supplies bullet points.
-    candidate_name: str = Field(default="Candidate Name")
-    candidate_email: str = Field(default="candidate@example.com")
-    candidate_phone: str = Field(default="+1 (555) 000-0000")
-    candidate_location: str = Field(default="City, State")
-    summary: str = Field(
-        default="Experienced professional seeking new opportunities."
-    )
-    job_title: str = Field(default="Software Engineer")
-    job_date_range: str = Field(default="Jan 2023 – Present")
-    company_name: str = Field(default="Tech Company")
-    job_location: str = Field(default="Remote")
-    skills_list: str = Field(default="Python, FastAPI, Docker")
-    degree: str = Field(default="Bachelor of Science in Computer Science")
-    education_date_range: str = Field(default="2018 – 2022")
-    institution: str = Field(default="University Name")
-
-    @field_validator("bullets")
-    @classmethod
-    def bullets_must_be_non_empty_strings(cls, v: list[str]) -> list[str]:
-        cleaned = [b.strip() for b in v if isinstance(b, str) and b.strip()]
-        if not cleaned:
-            raise ValueError("At least one non-empty bullet point is required.")
-        return cleaned
+    candidate_name: str = "Candidate Name"
+    candidate_email: str = "candidate@example.com"
+    candidate_phone: str = ""
+    candidate_location: str = ""
+    candidate_summary: str = ""
+    
+    experiences: list[Experience] = []
+    projects: list[Project] = []
+    education_blocks: list[Education] = []
+    grouped_skills: list[SkillCategory] = []
+    social_links: list[SocialLink] = []
 
 
 # ── Endpoint ───────────────────────────────────────────────────────────────
@@ -99,27 +104,82 @@ async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
     The LLM **never** writes LaTeX — only sanitized plaintext values are
     substituted into the predefined template placeholders.
     """
-    logger.info(
-        "PDF generation requested — %d bullet(s)", len(request.bullets)
-    )
+    logger.info("PDF generation requested for %s", request.candidate_name)
 
-    # ── 1. Sanitize every field ────────────────────────────────────────────
+    # ── 1. Dynamic Block Builders ──────────────────────────────────────────
+    
+    # Summary
+    summary_block = ""
+    if request.candidate_summary:
+        summary_block = f"\\small{{{sanitize(request.candidate_summary)}}}\n\\vspace{{8pt}}\n"
+
+    # Education
+    edu_block = "\\section{Education}\n  \\resumeSubHeadingListStart\n" if request.education_blocks else ""
+    for edu in request.education_blocks:
+        edu_block += f"    \\resumeSubheading\n      {{{sanitize(edu.institution)}}}{{}}\n      {{{sanitize(edu.degree)}}}{{{sanitize(edu.dates)}}}\n"
+    if request.education_blocks:
+        edu_block += "  \\resumeSubHeadingListEnd\n"
+
+    # Experiences
+    exp_block = ""
+    if request.experiences:
+        exp_block = "\\section{Experience}\n  \\resumeSubHeadingListStart\n"
+        for exp in request.experiences:
+            exp_block += f"    \\resumeSubheading\n      {{{sanitize(exp.title)}}}{{{sanitize(exp.dates)}}}\n      {{{sanitize(exp.company)}}}{{{sanitize(exp.location)}}}\n"
+            if exp.bullets:
+                exp_block += "      \\resumeItemListStart\n"
+                exp_block += sanitize_bullet_list(exp.bullets) + "\n"
+                exp_block += "      \\resumeItemListEnd\n"
+        exp_block += "  \\resumeSubHeadingListEnd\n"
+
+    # Projects
+    proj_block = ""
+    if request.projects:
+        proj_block = "\\section{Projects}\n  \\resumeSubHeadingListStart\n"
+        for proj in request.projects:
+            tech_str = f" $|$ \\emph{{{sanitize(proj.tech_stack)}}}" if proj.tech_stack else ""
+            
+            # Optional Link
+            link_str = ""
+            if proj.repository_url:
+                link_str += f" $|$ \\href{{{sanitize(proj.repository_url)}}}{{\\underline{{GitHub}}}}"
+            if proj.live_demo_url:
+                link_str += f" $|$ \\href{{{sanitize(proj.live_demo_url)}}}{{\\underline{{Live Demo}}}}"
+
+            proj_block += f"    \\resumeProjectHeading\n      {{\\textbf{{{sanitize(proj.title)}}}{tech_str}{link_str}}}{{{sanitize(proj.dates)}}}\n"
+            if proj.bullets:
+                proj_block += "      \\resumeItemListStart\n"
+                proj_block += sanitize_bullet_list(proj.bullets) + "\n"
+                proj_block += "      \\resumeItemListEnd\n"
+        proj_block += "  \\resumeSubHeadingListEnd\n"
+
+    # Skills Categorized
+    skills_block = ""
+    if request.grouped_skills:
+        skills_block = "\\section{Technical Skills}\n \\begin{itemize}[leftmargin=0.15in, label={}]\n    \\small{\\item{\n"
+        for sc in request.grouped_skills:
+            if sc.skills:
+                skills_val = ", ".join(sc.skills)
+                skills_block += f"     \\textbf{{{sanitize(sc.category)}}}{{: {sanitize(skills_val)}}} \\\\\n"
+        skills_block += "    }}\n \\end{itemize}\n"
+
+    # Social Links
+    social_block = ""
+    for s in request.social_links:
+        display = s.display_text if s.display_text else s.url.replace("https://", "").replace("http://", "")
+        social_block += f" $|$ \\href{{{sanitize(s.url)}}}{{\\underline{{{sanitize(display)}}}}}"
+
     data = {
         "CANDIDATE_NAME":     sanitize(request.candidate_name),
         "CANDIDATE_EMAIL":    sanitize(request.candidate_email),
         "CANDIDATE_PHONE":    sanitize(request.candidate_phone),
         "CANDIDATE_LOCATION": sanitize(request.candidate_location),
-        "SUMMARY":            sanitize(request.summary),
-        "JOB_TITLE":          sanitize(request.job_title),
-        "JOB_DATE_RANGE":     sanitize(request.job_date_range),
-        "COMPANY_NAME":       sanitize(request.company_name),
-        "JOB_LOCATION":       sanitize(request.job_location),
-        # Bullet list gets its own sanitize+format helper
-        "EXPERIENCE_POINTS":  sanitize_bullet_list(request.bullets),
-        "SKILLS_LIST":        sanitize(request.skills_list),
-        "DEGREE":             sanitize(request.degree),
-        "EDUCATION_DATE_RANGE": sanitize(request.education_date_range),
-        "INSTITUTION":        sanitize(request.institution),
+        "SOCIAL_LINKS_BLOCK": social_block,
+        "SUMMARY_BLOCK":      summary_block,
+        "EXPERIENCES_BLOCK":  exp_block,
+        "PROJECTS_BLOCK":     proj_block,
+        "EDUCATION_BLOCK":    edu_block,
+        "SKILLS_BLOCK":       skills_block,
     }
 
     # ── 2. Render template ─────────────────────────────────────────────────

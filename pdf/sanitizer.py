@@ -57,6 +57,7 @@ def sanitize(text: Union[str, None]) -> str:
     Escape all LaTeX special characters in *text*.
 
     Uses a single-pass regex substitution to prevent double-escaping.
+    Additionally, converts Markdown bold syntax (**text**) to LaTeX \\textbf{text}.
 
     Args:
         text: Raw string from user / AI output.
@@ -66,7 +67,13 @@ def sanitize(text: Union[str, None]) -> str:
     """
     if not text:
         return ""
-    return _ESCAPE_RE.sub(_replace_char, str(text))
+        
+    safe_text = _ESCAPE_RE.sub(_replace_char, str(text))
+    
+    # Convert markdown double-asterisk to LaTeX bold
+    safe_text = re.sub(r'\*\*(.*?)\*\*', r'\\textbf{\1}', safe_text)
+    
+    return safe_text
 
 
 def sanitize_bullet_list(items: list[str]) -> str:
@@ -74,21 +81,18 @@ def sanitize_bullet_list(items: list[str]) -> str:
     Convert a list of plain-text strings into LaTeX ``\item`` lines.
 
     Each item is individually sanitized before wrapping.
-
-    Args:
-        items: A list of bullet text strings.
-
-    Returns:
-        Multi-line string of ``\item …`` entries ready for an
-        ``itemize`` environment.
-
-    Example::
-
-        >>> sanitize_bullet_list(["Led team of 5", "Increased revenue by 30%"])
-        '\\item Led team of 5\n\\item Increased revenue by 30\\%'
+    Strips leading bullet characters like -, *, • to prevent double-bulleting in LaTeX.
     """
     if not items:
         return r"\item No experience points provided."
 
-    lines = [rf"\item {sanitize(item.strip())}" for item in items if item.strip()]
+    lines = []
+    for item in items:
+        cleaned = item.strip()
+        # Remove leading bullet points, hyphens, and whitespace
+        cleaned = re.sub(r'^[\s•\-*]+', '', cleaned).strip()
+        if cleaned:
+            lines.append(rf"\item {sanitize(cleaned)}")
+            
     return "\n".join(lines)
+
