@@ -79,7 +79,7 @@ class ResumeGenerationRequest(BaseModel):
 from ai.llm.ollama_provider import OllamaProvider
 from ai.llm.gemma_ollama_provider import GemmaOllamaProvider
 from ai.llm.llama_groq_provider import LlamaGroqProvider
-from ai.rag.embeddings import OllamaEmbeddings
+from ai.rag.embeddings import OllamaEmbeddings, HuggingFaceEmbeddings, KeywordEmbeddings
 from ai.rag.vector_store import InMemoryVectorStore
 from ai.rag.retriever import RAGRetriever
 from ai.pipeline import ResumePipeline
@@ -105,7 +105,21 @@ else:
     llm_provider = OllamaProvider(model="llama3.1:8b")
     logger.info("LLM Provider: Ollama (llama3.1:8b)")
 
-embeddings = OllamaEmbeddings(model="nomic-embed-text")
+# ── Embeddings — priority: HuggingFace API → Ollama → Keyword fallback ────────
+# 1. If HUGGINGFACE_API_KEY is set: use HuggingFace Inference API (free, good quality)
+# 2. Else if local Ollama provider: use OllamaEmbeddings (neural, local)
+# 3. Else: use KeywordEmbeddings (zero-dependency fallback, always works)
+_hf_api_key = os.getenv("HUGGINGFACE_API_KEY", "")
+if _hf_api_key:
+    embeddings = HuggingFaceEmbeddings(api_key=_hf_api_key)
+    logger.info("Embeddings: HuggingFace Inference API (all-MiniLM-L6-v2)")
+elif _provider_name in ("ollama", "gemma_ollama"):
+    embeddings = OllamaEmbeddings(model="nomic-embed-text")
+    logger.info("Embeddings: OllamaEmbeddings (nomic-embed-text)")
+else:
+    embeddings = KeywordEmbeddings()
+    logger.info("Embeddings: KeywordEmbeddings (zero-dependency fallback)")
+
 vector_store = InMemoryVectorStore(embeddings)
 retriever = RAGRetriever(vector_store)
 resume_pipeline = ResumePipeline(llm_provider, retriever)
