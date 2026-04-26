@@ -170,13 +170,33 @@ prompt = PromptTemplate(
 )
 
 
-def _get_llm() -> OllamaLLM:
-    """Create LLM lazily so the server doesn't crash if Ollama is not running at startup."""
-    return OllamaLLM(model="llama3.1:8b", temperature=0)
-
+def _generate_with_llm(page_content: str) -> str:
+    """Use the globally configured LLM to generate the extraction JSON."""
+    formatted_prompt = prompt.format(page_content=page_content[:3500])
+    
+    import os
+    provider_name = os.getenv("LLM_PROVIDER", "ollama").lower()
+    
+    if provider_name == "groq":
+        from ai.llm.llama_groq_provider import LlamaGroqProvider
+        logger.info("Extracting job info using Groq (llama-3.1-8b-instant)...")
+        return LlamaGroqProvider(model="llama-3.1-8b-instant").generate(formatted_prompt)
+        
+    elif provider_name == "gemma_ollama":
+        from ai.llm.gemma_ollama_provider import GemmaOllamaProvider
+        logger.info("Extracting job info using Ollama (gemma2:9b)...")
+        return GemmaOllamaProvider().generate(formatted_prompt)
+        
+    else:
+        # Default to local Ollama Llama 3.1
+        from langchain_ollama import OllamaLLM
+        logger.info("Extracting job info using local Ollama (llama3.1:8b)...")
+        llm = OllamaLLM(model="llama3.1:8b", temperature=0)
+        return llm.invoke(formatted_prompt)
 
 def _parse_json_from_response(text: str) -> dict:
     """Robustly extract JSON from LLM response text."""
+    import json
     try:
         return json.loads(text.strip())
     except json.JSONDecodeError:
@@ -205,14 +225,11 @@ def _parse_json_from_response(text: str) -> dict:
     }
 
 
+
 def extract_job_info(url: str) -> dict:
     """Fetch page, run LLM extraction chain, return structured job dict."""
     page_text = fetch_page(url)
-    llm = _get_llm()
-    chain = prompt | llm
-    logger.info("Running LangChain chain with llama3.1:8b...")
-    # Keep to 3500 chars — 1.3b models perform poorly on very long contexts
-    raw_output = chain.invoke({"page_content": page_text[:3500]})
+    raw_output = _generate_with_llm(page_text)
     result = _parse_json_from_response(raw_output)
     result["source_url"] = url
     return result
@@ -220,10 +237,7 @@ def extract_job_info(url: str) -> dict:
 
 def extract_from_text(text: str, source_url: str = "pasted-text") -> dict:
     """Extract job info directly from pasted text — no browser fetch needed."""
-    llm = _get_llm()
-    chain = prompt | llm
-    logger.info("Extracting from pasted text with llama3.1:8b...")
-    raw_output = chain.invoke({"page_content": text[:3500]})
+    raw_output = _generate_with_llm(text)
     result = _parse_json_from_response(raw_output)
     result["source_url"] = source_url
     return result
