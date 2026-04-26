@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export default function DashboardPage() {
   const { token, user } = useAuth();
   const router = useRouter();
@@ -128,22 +130,22 @@ export default function DashboardPage() {
     try {
       const headers = { Authorization: `Bearer ${token}` };
       let p = {};
-      const profRes = await fetch('http://localhost:8000/api/vault/profile', { headers });
+      const profRes = await fetch(`${API_URL}/api/vault/profile`, { headers });
       if (profRes.ok) {
         p = await profRes.json();
         setProfile(p);
         setProfForm({ first_name: (p as any).first_name || '', last_name: (p as any).last_name || '', location: (p as any).location || '', phone: (p as any).phone || '', summary: (p as any).summary || '' });
       }
       let exps: any[] = [], projs: any[] = [], skls: any[] = [], edus: any[] = [], socs: any[] = [];
-      const expRes = await fetch('http://localhost:8000/api/vault/experiences', { headers });
+      const expRes = await fetch(`${API_URL}/api/vault/experiences`, { headers });
       if (expRes.ok) { exps = await expRes.json(); setExperiences(exps); }
-      const projsRes = await fetch('http://localhost:8000/api/vault/projects', { headers });
+      const projsRes = await fetch(`${API_URL}/api/vault/projects`, { headers });
       if (projsRes.ok) { projs = await projsRes.json(); setProjects(projs); }
-      const skillsRes = await fetch('http://localhost:8000/api/vault/skills', { headers });
+      const skillsRes = await fetch(`${API_URL}/api/vault/skills`, { headers });
       if (skillsRes.ok) { skls = await skillsRes.json(); setSkills(skls); }
-      const eduRes = await fetch('http://localhost:8000/api/vault/educations', { headers });
+      const eduRes = await fetch(`${API_URL}/api/vault/educations`, { headers });
       if (eduRes.ok) { edus = await eduRes.json(); setEducations(edus); }
-      const socialRes = await fetch('http://localhost:8000/api/vault/socials', { headers });
+      const socialRes = await fetch(`${API_URL}/api/vault/socials`, { headers });
       if (socialRes.ok) { socs = await socialRes.json(); setSocials(socs); }
       // Persist fresh data to sessionStorage
       saveVaultCache({ profile: p, experiences: exps, projects: projs, skills: skls, educations: edus, socials: socs });
@@ -162,7 +164,7 @@ export default function DashboardPage() {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('http://localhost:8000/api/vault/profile', {
+    await fetch(`${API_URL}/api/vault/profile`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(profForm)
@@ -174,7 +176,7 @@ export default function DashboardPage() {
 
   const handleAddExp = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('http://localhost:8000/api/vault/experiences', {
+    await fetch(`${API_URL}/api/vault/experiences`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -191,7 +193,7 @@ export default function DashboardPage() {
 
   const handleAddProj = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('http://localhost:8000/api/vault/projects', {
+    await fetch(`${API_URL}/api/vault/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({
@@ -209,7 +211,7 @@ export default function DashboardPage() {
 
   const handleAddEdu = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('http://localhost:8000/api/vault/educations', {
+    await fetch(`${API_URL}/api/vault/educations`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify({ ...eduForm, end_date: eduForm.end_date || null })
@@ -222,7 +224,7 @@ export default function DashboardPage() {
 
   const handleAddSocial = async (e: React.FormEvent) => {
     e.preventDefault();
-    await fetch('http://localhost:8000/api/vault/socials', {
+    await fetch(`${API_URL}/api/vault/socials`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
       body: JSON.stringify(socialForm)
@@ -238,7 +240,7 @@ export default function DashboardPage() {
     // Allow comma separated skills addition for faster grouping
     const skillsToAdd = skillForm.skill_name.split(',').map(s => s.trim()).filter(s => s);
     for (const s of skillsToAdd) {
-        await fetch('http://localhost:8000/api/vault/skills', {
+        await fetch(`${API_URL}/api/vault/skills`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
           body: JSON.stringify({ skill_name: s, category: skillForm.category })
@@ -341,7 +343,7 @@ export default function DashboardPage() {
     setGenError(null);
 
     try {
-      const res = await fetch("http://localhost:8000/generate-resume", {
+      const res = await fetch(`${API_URL}/generate-resume`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -429,7 +431,7 @@ export default function DashboardPage() {
         social_links: stagedSocials
       };
 
-      const res = await fetch("http://localhost:8000/generate-resume-pdf", {
+      const res = await fetch(`${API_URL}/generate-resume-pdf`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)

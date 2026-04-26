@@ -7,7 +7,7 @@ The system is a full-stack, AI-driven web application that allows users to paste
 The application uses a **Client-Server Architecture** heavily decoupled into three primary execution areas:
 - **Client (Frontend)**: Next.js 15 (React) providing the UI.
 - **API Control Layer (Backend)**: FastAPI mediating logic between crawlers and AI.
-- **Local AI Engine**: Ollama running local LLMs and embeddings isolated from business logic.
+- **AI Control Engine**: Factory Pattern mapping context to either Local Ollama limits or rapid Cloud Groq APIs directly.
 
 ## 3. High-Level Components
 
@@ -36,4 +36,4 @@ The application uses a **Client-Server Architecture** heavily decoupled into thr
 - **Frontend Framework**: Next.js (App Router), React, Vanilla CSS.
 - **Backend Framework**: Python 3.10+, FastAPI, Uvicorn.
 - **Crawlers**: BeautifulSoup4, Playwright.
-- **AI Tooling**: LangChain, Local Ollama (`llama3.1:8b` + `nomic-embed-text`).
+- **AI Tooling**: Local Ollama (`llama3.1:8b` / `gemma2:9b`), Cloud Groq API (`llama-3.1-8b-instant`), HuggingFace Models.

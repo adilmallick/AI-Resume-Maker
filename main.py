@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from scraper.extractor import extract_job_info
 import logging
 import asyncio
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -18,10 +19,13 @@ app = FastAPI(
     version="2.0.0",
 )
 
-# Allow Next.js dev server
+# Allow origins from CORS_ORIGINS env var (comma-separated)
+_cors_origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
+_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -47,7 +51,11 @@ class ScrapeResponse(BaseModel):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": "llama3.1:8b", "provider": "ollama"}
+    return {
+        "status": "ok",
+        "provider": os.getenv("LLM_PROVIDER", "ollama"),
+        "model": "llama-3.1-8b-instant" if os.getenv("LLM_PROVIDER", "ollama") == "groq" else "llama3.1:8b",
+    }
 
 
 @app.post("/scrape", response_model=ScrapeResponse)
@@ -69,12 +77,34 @@ class ResumeGenerationRequest(BaseModel):
     job_url: str
 
 from ai.llm.ollama_provider import OllamaProvider
+from ai.llm.gemma_ollama_provider import GemmaOllamaProvider
+from ai.llm.llama_groq_provider import LlamaGroqProvider
 from ai.rag.embeddings import OllamaEmbeddings
 from ai.rag.vector_store import InMemoryVectorStore
 from ai.rag.retriever import RAGRetriever
 from ai.pipeline import ResumePipeline
 
-llm_provider = OllamaProvider(model="llama3.1:8b")
+
+# ── LLM Provider Factory ───────────────────────────────────────────────────
+# Set LLM_PROVIDER in your .env to switch providers without changing code.
+#
+#   LLM_PROVIDER=ollama        → OllamaProvider  (llama3.1:8b, default)
+#   LLM_PROVIDER=gemma_ollama  → GemmaOllamaProvider (gemma2:9b via Ollama)
+#   LLM_PROVIDER=groq          → LlamaGroqProvider   (llama-3.1-8b-instant via Groq API)
+#                                 also requires: GROQ_API_KEY=your_key
+#
+_provider_name = os.getenv("LLM_PROVIDER", "ollama").lower()
+
+if _provider_name == "groq":
+    llm_provider = LlamaGroqProvider()
+    logger.info("LLM Provider: Groq (llama-3.1-8b-instant)")
+elif _provider_name == "gemma_ollama":
+    llm_provider = GemmaOllamaProvider()
+    logger.info("LLM Provider: Ollama (gemma2:9b)")
+else:
+    llm_provider = OllamaProvider(model="llama3.1:8b")
+    logger.info("LLM Provider: Ollama (llama3.1:8b)")
+
 embeddings = OllamaEmbeddings(model="nomic-embed-text")
 vector_store = InMemoryVectorStore(embeddings)
 retriever = RAGRetriever(vector_store)

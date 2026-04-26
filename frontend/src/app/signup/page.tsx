@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export default function SignupPage() {
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
@@ -16,7 +18,7 @@ export default function SignupPage() {
     setError('');
 
     try {
-      const res = await fetch('http://localhost:8000/auth/signup', {
+      const res = await fetch(`${API_URL}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password, first_name: firstName, last_name: lastName }),
@@ -29,7 +31,7 @@ export default function SignupPage() {
 
       const data = await res.json();
       
-      const userRes = await fetch('http://localhost:8000/auth/me', {
+      const userRes = await fetch(`${API_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${data.access_token}` }
       });
       const userData = await userRes.json();

@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -18,7 +20,7 @@ export default function LoginPage() {
       formData.append('username', email); // OAuth2 expects 'username'
       formData.append('password', password);
 
-      const res = await fetch('http://localhost:8000/auth/login', {
+      const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: formData,
@@ -30,7 +32,7 @@ export default function LoginPage() {
 
       const data = await res.json();
       
-      const userRes = await fetch('http://localhost:8000/auth/me', {
+      const userRes = await fetch(`${API_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${data.access_token}` }
       });
       const userData = await userRes.json();
