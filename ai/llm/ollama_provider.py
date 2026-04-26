@@ -16,11 +16,13 @@ class OllamaProvider(LLMProvider):
             "prompt": prompt,
             "stream": False,
             "options": {
-                 "temperature": 0.0
+                 "temperature": 0.0,
+                 "num_predict": 2048,
+                 "num_ctx": 4096
             }
         }
         try:
-            response = requests.post(self.endpoint, json=payload, timeout=60)
+            response = requests.post(self.endpoint, json=payload, timeout=180)
             response.raise_for_status()
             data = response.json()
             return data.get("response", "")

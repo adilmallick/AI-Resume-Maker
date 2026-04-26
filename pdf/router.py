@@ -111,7 +111,7 @@ async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
     # Summary
     summary_block = ""
     if request.candidate_summary:
-        summary_block = f"\\small{{{sanitize(request.candidate_summary)}}}\n\\vspace{{8pt}}\n"
+        summary_block = f"\\section{{Professional Summary}}\n\\small{{{sanitize(request.candidate_summary)}}}\n"
 
     # Education
     edu_block = "\\section{Education}\n  \\resumeSubHeadingListStart\n" if request.education_blocks else ""

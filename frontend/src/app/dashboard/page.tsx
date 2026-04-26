@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 
@@ -45,26 +45,108 @@ export default function DashboardPage() {
   // We'll manage stagedSkills as a grouped format: [{category: "Languages", skills: ["JS", "TS"]}, ...]
   const [stagedSkills, setStagedSkills] = useState<{category: string, skills: string[]}[]>([]);
   const [stagedSocials, setStagedSocials] = useState<any[]>([]);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isDirty, setIsDirty] = useState(false);
+  const stagingInitialized = useRef(false);
+  // Stores JSON of staged data at the time of last compile (or initial load)
+  const compiledSnapshot = useRef<string>('');
 
-  const fetchVault = async () => {
+  const buildSnapshot = (profile: any, exps: any[], projs: any[], edus: any[], skills: any[], socials: any[]) =>
+    JSON.stringify({ profile, exps, projs, edus, skills, socials });
+
+  // Reset when review workspace opens
+  useEffect(() => {
+    if (isReviewing) {
+      stagingInitialized.current = false;
+      setIsDirty(false);
+    }
+  }, [isReviewing]);
+
+  // Compare current staged data to the last-compiled snapshot
+  useEffect(() => {
+    if (!isReviewing) return;
+    const current = buildSnapshot(stagedProfile, stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials);
+    if (!stagingInitialized.current) {
+      // Capture the baseline (initial AI-generated staging)
+      compiledSnapshot.current = current;
+      stagingInitialized.current = true;
+      return;
+    }
+    setIsDirty(current !== compiledSnapshot.current);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedProfile, stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials]);
+
+  // ─── sessionStorage helpers ───────────────────────────
+  const VAULT_CACHE_KEY = `vault_cache_${user?.id ?? 'anon'}`;
+
+  const saveVaultCache = (data: {
+    profile: any;
+    experiences: any[];
+    projects: any[];
+    skills: any[];
+    educations: any[];
+    socials: any[];
+  }) => {
+    try {
+      sessionStorage.setItem(VAULT_CACHE_KEY, JSON.stringify({ ...data, _ts: Date.now() }));
+    } catch { /* quota exceeded — ignore */ }
+  };
+
+  const loadVaultCache = () => {
+    try {
+      const raw = sessionStorage.getItem(VAULT_CACHE_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch { return null; }
+  };
+
+  const bustVaultCache = () => sessionStorage.removeItem(VAULT_CACHE_KEY);
+  // ────────────────────────────────────────────────────────
+
+  const fetchVault = async (forceRefresh = false) => {
+    // Serve from cache unless a write operation just happened
+    if (!forceRefresh) {
+      const cached = loadVaultCache();
+      if (cached) {
+        setProfile(cached.profile ?? {});
+        setProfForm({
+          first_name: cached.profile?.first_name || '',
+          last_name: cached.profile?.last_name || '',
+          location: cached.profile?.location || '',
+          phone: cached.profile?.phone || '',
+          summary: cached.profile?.summary || ''
+        });
+        setExperiences(cached.experiences ?? []);
+        setProjects(cached.projects ?? []);
+        setSkills(cached.skills ?? []);
+        setEducations(cached.educations ?? []);
+        setSocials(cached.socials ?? []);
+        return; // ← skip API calls
+      }
+    }
     try {
       const headers = { Authorization: `Bearer ${token}` };
+      let p = {};
       const profRes = await fetch('http://localhost:8000/api/vault/profile', { headers });
       if (profRes.ok) {
-        const p = await profRes.json();
+        p = await profRes.json();
         setProfile(p);
-        setProfForm({ first_name: p.first_name || '', last_name: p.last_name || '', location: p.location || '', phone: p.phone || '', summary: p.summary || '' });
+        setProfForm({ first_name: (p as any).first_name || '', last_name: (p as any).last_name || '', location: (p as any).location || '', phone: (p as any).phone || '', summary: (p as any).summary || '' });
       }
+      let exps: any[] = [], projs: any[] = [], skls: any[] = [], edus: any[] = [], socs: any[] = [];
       const expRes = await fetch('http://localhost:8000/api/vault/experiences', { headers });
-      if (expRes.ok) setExperiences(await expRes.json());
+      if (expRes.ok) { exps = await expRes.json(); setExperiences(exps); }
       const projsRes = await fetch('http://localhost:8000/api/vault/projects', { headers });
-      if (projsRes.ok) setProjects(await projsRes.json());
+      if (projsRes.ok) { projs = await projsRes.json(); setProjects(projs); }
       const skillsRes = await fetch('http://localhost:8000/api/vault/skills', { headers });
-      if (skillsRes.ok) setSkills(await skillsRes.json());
+      if (skillsRes.ok) { skls = await skillsRes.json(); setSkills(skls); }
       const eduRes = await fetch('http://localhost:8000/api/vault/educations', { headers });
-      if (eduRes.ok) setEducations(await eduRes.json());
+      if (eduRes.ok) { edus = await eduRes.json(); setEducations(edus); }
       const socialRes = await fetch('http://localhost:8000/api/vault/socials', { headers });
-      if (socialRes.ok) setSocials(await socialRes.json());
+      if (socialRes.ok) { socs = await socialRes.json(); setSocials(socs); }
+      // Persist fresh data to sessionStorage
+      saveVaultCache({ profile: p, experiences: exps, projects: projs, skills: skls, educations: edus, socials: socs });
     } catch (e) {
       console.error(e);
     }
@@ -86,7 +168,8 @@ export default function DashboardPage() {
       body: JSON.stringify(profForm)
     });
     setIsEditingProfile(false);
-    fetchVault();
+    bustVaultCache();
+    fetchVault(true);
   };
 
   const handleAddExp = async (e: React.FormEvent) => {
@@ -102,7 +185,8 @@ export default function DashboardPage() {
     });
     setIsAddingExp(false);
     setExpForm({ company_name: '', job_title: '', location: '', start_date: '', end_date: '', raw_description: '' });
-    fetchVault();
+    bustVaultCache();
+    fetchVault(true);
   };
 
   const handleAddProj = async (e: React.FormEvent) => {
@@ -119,7 +203,8 @@ export default function DashboardPage() {
     });
     setIsAddingProj(false);
     setProjForm({ title: '', role: '', tech_stack: '', repository_url: '', live_demo_url: '', start_date: '', end_date: '', raw_description: '' });
-    fetchVault();
+    bustVaultCache();
+    fetchVault(true);
   };
 
   const handleAddEdu = async (e: React.FormEvent) => {
@@ -131,7 +216,8 @@ export default function DashboardPage() {
     });
     setIsAddingEdu(false);
     setEduForm({ institution: '', degree: '', field_of_study: '', start_date: '', end_date: '' });
-    fetchVault();
+    bustVaultCache();
+    fetchVault(true);
   };
 
   const handleAddSocial = async (e: React.FormEvent) => {
@@ -143,7 +229,8 @@ export default function DashboardPage() {
     });
     setIsAddingSocial(false);
     setSocialForm({ platform_name: '', url: '', display_text: '' });
-    fetchVault();
+    bustVaultCache();
+    fetchVault(true);
   };
 
   const handleAddSkill = async (e: React.FormEvent) => {
@@ -159,44 +246,30 @@ export default function DashboardPage() {
     }
     setIsAddingSkill(false);
     setSkillForm({ skill_name: '', category: '' });
-    fetchVault();
+    bustVaultCache();
+    fetchVault(true);
   };
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!url.trim() || !token) return;
 
-    setGenStatus("loading");
-    setGenError(null);
+    const normalizedUrl = url.trim().toLowerCase();
+    const GEN_CACHE_KEY = `gen_cache_${user?.id ?? 'anon'}_${normalizedUrl}`;
 
-    try {
-      const res = await fetch("http://localhost:8000/generate-resume", {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ job_url: url.trim() })
+    // ─── Try to restore from session cache ───────────────
+    const applyGeneratedData = (data: any) => {
+      setStagedProfile({
+        first_name: profile.first_name || '',
+        last_name: profile.last_name || '',
+        location: profile.location || '',
+        email: user?.email || '',
+        phone: profile.phone || '',
+        summary: data.summary || profile.summary || '',
       });
 
-      if (!res.ok) throw new Error("Failed to generate AI outline.");
-
-      const data = await res.json();
-      
-      // Clone profile context — inject AI-generated summary if available
-      setStagedProfile({ 
-          first_name: profile.first_name || '',
-          last_name: profile.last_name || '',
-          location: profile.location || '',
-          email: user?.email || '',
-          phone: profile.phone || '',
-          summary: data.summary || profile.summary || '',
-      });
-
-      // Clone Socials
       setStagedSocials([...socials]);
 
-      // Use AI-generated categorized skills if available, else fall back to vault
       if (data.technical_skills && data.technical_skills.length > 0) {
         setStagedSkills(data.technical_skills);
       } else {
@@ -208,16 +281,14 @@ export default function DashboardPage() {
         }, {});
         setStagedSkills(Object.keys(grouped).map(cat => ({ category: cat, skills: grouped[cat] })));
       }
-      
-      // Clone Education
+
       setStagedEducations(educations.length > 0 ? educations.map((edu: any) => ({
-          ...edu,
-          dates: edu.dates || `${edu.start_date || ''} -- ${edu.end_date || 'Present'}`
+        ...edu,
+        dates: edu.dates || `${edu.start_date || ''} -- ${edu.end_date || 'Present'}`
       })) : [
-         { institution: "University Name", degree: "Bachelor of Science", dates: "Aug. 2018 -- May 2022" }
+        { institution: "University Name", degree: "Bachelor of Science", dates: "Aug. 2018 -- May 2022" }
       ]);
 
-      // Clone Experiences — inject AI-generated bullets matched by company name
       const aiExpMap: Record<string, string[]> = {};
       (data.experiences || []).forEach((ae: any) => {
         if (ae.company) aiExpMap[ae.company.toLowerCase()] = ae.bullets || [];
@@ -234,7 +305,6 @@ export default function DashboardPage() {
       });
       setStagedExps(clonedExps);
 
-      // Clone Projects — inject AI-generated bullets matched by title
       const aiProjMap: Record<string, string[]> = {};
       (data.projects || []).forEach((ap: any) => {
         if (ap.title) aiProjMap[ap.title.toLowerCase()] = ap.bullets || [];
@@ -254,6 +324,42 @@ export default function DashboardPage() {
 
       setIsReviewing(true);
       setGenStatus("idle");
+    };
+
+    // Check cache first — same URL = skip API
+    try {
+      const cached = sessionStorage.getItem(GEN_CACHE_KEY);
+      if (cached) {
+        const { data } = JSON.parse(cached);
+        applyGeneratedData(data);
+        return; // ← served from cache, no API call
+      }
+    } catch { /* ignore parse errors */ }
+    // ─────────────────────────────────────────────────────
+
+    setGenStatus("loading");
+    setGenError(null);
+
+    try {
+      const res = await fetch("http://localhost:8000/generate-resume", {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ job_url: url.trim() })
+      });
+
+      if (!res.ok) throw new Error("Failed to generate AI outline.");
+
+      const data = await res.json();
+
+      // Persist to session cache
+      try {
+        sessionStorage.setItem(GEN_CACHE_KEY, JSON.stringify({ data, _ts: Date.now() }));
+      } catch { /* quota exceeded */ }
+
+      applyGeneratedData(data);
     } catch (err: any) {
       setGenError(err.message || "Failed to analyze target job.");
       setGenStatus("error");
@@ -285,8 +391,8 @@ export default function DashboardPage() {
       setStagedProjs(updated);
   };
 
-  const handleApproveAndDownload = async () => {
-    setGenStatus("loading");
+  const handleGeneratePreview = async () => {
+    setIsPreviewLoading(true);
     try {
       const formattedExps = stagedExps.map((exp) => ({
         company: exp.company_name || '',
@@ -332,24 +438,47 @@ export default function DashboardPage() {
       if (!res.ok) throw new Error("Failed to compile LaTeX PDF.");
 
       const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `Tailored_Resume_${profile.first_name || 'vault'}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      
-      setGenStatus("success");
-      setIsReviewing(false);
-      setUrl('');
+      const newUrl = window.URL.createObjectURL(blob);
+      setPdfPreviewUrl(newUrl);
+      // Update snapshot to reflect newly compiled state — further reverts compare against this
+      compiledSnapshot.current = buildSnapshot(stagedProfile, stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials);
+      setIsDirty(false);
+      setGenError(null);
     } catch (err: any) {
       setGenError(err.message);
-      setGenStatus("error");
+    } finally {
+      setIsPreviewLoading(false);
     }
   };
 
+  useEffect(() => {
+    if (isReviewing && !pdfPreviewUrl) {
+      handleGeneratePreview();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReviewing]);
+
+  const handleDownloadPdf = () => {
+    if (!pdfPreviewUrl) return;
+    const a = document.createElement('a');
+    a.href = pdfPreviewUrl;
+    a.download = `Tailored_Resume_${profile.first_name || 'vault'}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setGenStatus("success");
+    setUrl('');
+  };
+
   if (!token) return null;
+
+  const labelStyle: React.CSSProperties = { display: 'block', fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '4px' };
+  const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', fontSize: '0.9rem' };
+  const sectionLabel: React.CSSProperties = { fontSize: '0.68rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.12em', marginBottom: '10px', display: 'block' };
+  const subCard: React.CSSProperties = { background: 'rgba(108,93,211,0.06)', border: '1px solid rgba(108,93,211,0.25)', borderRadius: '10px', padding: '14px', marginBottom: '10px' };
+  const subCardHeader: React.CSSProperties = { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', paddingBottom: '8px', borderBottom: '1px solid rgba(255,255,255,0.05)' };
+  const subCardLabel: React.CSSProperties = { fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-light)', textTransform: 'uppercase', letterSpacing: '0.05em' };
+  const removeBtn: React.CSSProperties = { background: 'none', border: 'none', color: 'var(--error)', cursor: 'pointer', fontSize: '0.72rem', opacity: 0.8 };
 
   return (
     <>
@@ -658,151 +787,205 @@ export default function DashboardPage() {
       </div>
 
       {isReviewing && (
-        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(10,10,15,0.95)', backdropFilter: 'blur(10px)', overflowY: 'auto', padding: '40px' }}>
-           <div className="container" style={{ maxWidth: '800px', margin: '0 auto', background: 'var(--bg-card)', padding: '40px', borderRadius: '20px', border: '1px solid var(--accent)' }}>
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
+           
+           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', background: 'var(--bg-card)', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+             <div>
+               <h2 style={{ fontSize: '1.2rem', color: 'var(--success)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{fontSize: '1.4rem'}}>✨</span> Review PDF Outline</h2>
+               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Edits will NOT overwrite your master Vault.</span>
+             </div>
+             <div style={{ display: 'flex', gap: '10px' }}>
+                 <button className="btn btn-secondary" onClick={() => setIsReviewing(false)} style={{ padding: '6px 15px', fontSize: '0.9rem' }}>Cancel</button>
+                 <button
+                   className="btn btn-secondary"
+                   onClick={handleGeneratePreview}
+                   disabled={isPreviewLoading}
+                   style={{ position: 'relative', padding: '6px 15px', fontSize: '0.9rem', background: 'rgba(108, 93, 211, 0.2)' }}
+                 >
+                   {isDirty && !isPreviewLoading && (
+                     <span style={{
+                       position: 'absolute', top: '-5px', right: '-5px',
+                       width: '10px', height: '10px', borderRadius: '50%',
+                       background: '#ef4444', boxShadow: '0 0 6px rgba(239,68,68,0.8)',
+                       display: 'block'
+                     }} />
+                   )}
+                   {isPreviewLoading ? "Recompiling..." : "Recompile"}
+                 </button>
+                 <button className="btn btn-primary" onClick={handleDownloadPdf} disabled={!pdfPreviewUrl} style={{ padding: '6px 15px', fontSize: '0.9rem', background: 'linear-gradient(135deg, var(--success) 0%, #16a34a 100%)' }}>
+                   Download PDF
+                 </button>
+             </div>
+           </div>
+           
+           <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
               
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px' }}>
-                 <div>
-                   <h2 style={{ fontSize: '2rem', color: 'var(--success)' }}>Review PDF Outline ✨</h2>
-                   <p className="title-sub" style={{ fontSize: '0.9rem', marginTop: '6px' }}>Edit your Staged Resume below. These edits will NOT overwrite your master Vault.</p>
-                 </div>
-                 <div style={{ display: 'flex', gap: '10px' }}>
-                     <button className="btn btn-secondary" onClick={() => setIsReviewing(false)}>Cancel Drop</button>
-                     <button className="btn btn-primary" onClick={handleApproveAndDownload} disabled={genStatus === "loading"} style={{ background: 'linear-gradient(135deg, var(--success) 0%, #16a34a 100%)' }}>
-                       {genStatus === "loading" ? "Compiling PDF..." : "Approve & Download"}
-                     </button>
-                 </div>
-              </div>
-              
-              {/* Profile Editor */}
-              <div className="glass-card" style={{ marginBottom: '20px', background: 'rgba(255,255,255,0.02)' }}>
-                 <h3 style={{ marginBottom: '15px', color: 'var(--accent-light)' }}>Header Block</h3>
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                   <input className="form-input" placeholder="First Name" value={stagedProfile?.first_name || ''} onChange={e => setStagedProfile({...stagedProfile, first_name: e.target.value})} />
-                   <input className="form-input" placeholder="Last Name" value={stagedProfile?.last_name || ''} onChange={e => setStagedProfile({...stagedProfile, last_name: e.target.value})} />
-                 </div>
-                 <div style={{ display: 'grid', gridTemplateColumns: 'min-content 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                   <input className="form-input" placeholder="Location" value={stagedProfile?.location || ''} onChange={e => setStagedProfile({...stagedProfile, location: e.target.value})} />
-                   <input className="form-input" placeholder="Email" value={stagedProfile?.email || ''} onChange={e => setStagedProfile({...stagedProfile, email: e.target.value})} />
-                   <input className="form-input" placeholder="Phone" value={stagedProfile?.phone || ''} onChange={e => setStagedProfile({...stagedProfile, phone: e.target.value})} />
-                 </div>
-                 <textarea className="form-input" placeholder="Professional Summary (Optional)" style={{ width: '100%', minHeight: '80px' }} value={stagedProfile?.summary || ''} onChange={e => setStagedProfile({...stagedProfile, summary: e.target.value})} />
-              </div>
-              
-              {/* Social Links Block */}
-              <div className="glass-card" style={{ marginBottom: '20px' }}>
-                 <h3 style={{ marginBottom: '15px', color: 'var(--accent-light)' }}>Social / Portfolio Links</h3>
-                 {stagedSocials.map((soc, idx) => (
-                    <div key={`social-${idx}`} style={{ display: 'grid', gridTemplateColumns: 'min-content 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                      <input className="form-input" placeholder="Platform" value={soc.platform_name} onChange={e => { const updated = [...stagedSocials]; updated[idx].platform_name = e.target.value; setStagedSocials(updated); }} />
-                      <input className="form-input" placeholder="Display Text (Optional)" value={soc.display_text || ''} onChange={e => { const updated = [...stagedSocials]; updated[idx].display_text = e.target.value; setStagedSocials(updated); }} />
-                      <input className="form-input" placeholder="URL *" value={soc.url} onChange={e => { const updated = [...stagedSocials]; updated[idx].url = e.target.value; setStagedSocials(updated); }} />
-                    </div>
-                 ))}
-                 <button className="btn btn-secondary" style={{ marginTop: '5px' }} onClick={() => setStagedSocials([...stagedSocials, { platform_name: '', display_text: '', url: '' }])}>+ Add Social Link</button>
-              </div>
+              {/* ─── Left: Editor Panel (55%) ─── */}
+              <div style={{ width: '55%', overflowY: 'auto', padding: '20px 24px' }} className="custom-scrollbar">
 
-              {/* Education Block */}
-              <div className="glass-card" style={{ marginBottom: '20px' }}>
-                 <h3 style={{ marginBottom: '15px', color: 'var(--accent-light)' }}>Education</h3>
-                 {stagedEducations.map((edu, idx) => (
-                    <div key={`edu-${idx}`} style={{ marginBottom: '10px' }}>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                        <input className="form-input" placeholder="Institution" value={edu.institution} onChange={e => { const updated = [...stagedEducations]; updated[idx].institution = e.target.value; setStagedEducations(updated); }} />
-                        <input className="form-input" placeholder="Degree (e.g. BS in CS)" value={edu.degree} onChange={e => { const updated = [...stagedEducations]; updated[idx].degree = e.target.value; setStagedEducations(updated); }} />
-                      </div>
-                      <input className="form-input" placeholder="Dates (e.g. 2018 - 2022)" style={{ width: '100%' }} value={edu.dates} onChange={e => { const updated = [...stagedEducations]; updated[idx].dates = e.target.value; setStagedEducations(updated); }} />
+                {/* Header Block */}
+                <div style={{ marginBottom: '20px' }}>
+                  <span style={sectionLabel}>Header Block</span>
+                  <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid var(--glass-border)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div><label style={labelStyle}>First Name</label><input className="form-input" style={inputStyle} placeholder="First Name" value={stagedProfile?.first_name || ''} onChange={e => setStagedProfile({...stagedProfile, first_name: e.target.value})} /></div>
+                      <div><label style={labelStyle}>Last Name</label><input className="form-input" style={inputStyle} placeholder="Last Name" value={stagedProfile?.last_name || ''} onChange={e => setStagedProfile({...stagedProfile, last_name: e.target.value})} /></div>
                     </div>
-                 ))}
-                 <button className="btn btn-secondary" style={{ marginTop: '5px' }} onClick={() => setStagedEducations([...stagedEducations, { institution: '', degree: '', dates: '' }])}>+ Add Education Line</button>
-              </div>
-
-              {/* Skills Block */}
-              <div className="glass-card" style={{ marginBottom: '20px' }}>
-                 <h3 style={{ marginBottom: '15px', color: 'var(--accent-light)' }}>Categorized Technical Skills</h3>
-                 {stagedSkills.map((sg, idx) => (
-                    <div key={`sg-${idx}`} style={{ marginBottom: '15px' }}>
-                      <input className="form-input" placeholder="Category (e.g. Languages)" style={{ width: '100%', marginBottom: '6px', fontWeight: 600 }} value={sg.category} onChange={e => { const updated = [...stagedSkills]; updated[idx].category = e.target.value; setStagedSkills(updated); }} />
-                      <textarea className="form-input" placeholder="Comma Separated Skills" style={{ width: '100%', minHeight: '60px' }} value={sg.skills.join(', ')} onChange={e => { const updated = [...stagedSkills]; updated[idx].skills = e.target.value.split(',').map(s => s.trim()); setStagedSkills(updated); }} />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div><label style={labelStyle}>Location</label><input className="form-input" style={inputStyle} placeholder="e.g. Kolkata, India" value={stagedProfile?.location || ''} onChange={e => setStagedProfile({...stagedProfile, location: e.target.value})} /></div>
+                      <div><label style={labelStyle}>Email</label><input className="form-input" style={inputStyle} placeholder="email@example.com" value={stagedProfile?.email || ''} onChange={e => setStagedProfile({...stagedProfile, email: e.target.value})} /></div>
                     </div>
-                 ))}
-                 <button className="btn btn-secondary" style={{ marginTop: '5px' }} onClick={() => setStagedSkills([...stagedSkills, { category: '', skills: [] }])}>+ Add Skill Category</button>
-              </div>
-
-              {/* Experiences Iterator */}
-              {stagedExps.map((exp, idx) => (
-                <div key={`exp-${idx}`} className="glass-card" style={{ marginBottom: '20px', borderLeft: idx === 0 ? '3px solid var(--success)' : 'none' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-                    <h3 style={{ color: 'var(--accent-light)' }}>Experience {idx + 1} {idx === 0 && <span style={{ fontSize: '0.8rem', color: 'var(--success)' }}>(AI Targeted)</span>}</h3>
-                    <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.8rem', borderColor: 'var(--error)', color: 'var(--error)' }} onClick={() => setStagedExps(stagedExps.filter((_, i) => i !== idx))}>Remove</button>
-                  </div>
-                  
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" value={exp.job_title} onChange={e => updateStagedExp(idx, 'job_title', e.target.value)} placeholder="Title" />
-                    <input className="form-input" value={exp.company_name} onChange={e => updateStagedExp(idx, 'company_name', e.target.value)} placeholder="Company" />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
-                    <input className="form-input" value={exp.start_date} onChange={e => updateStagedExp(idx, 'start_date', e.target.value)} placeholder="Start Date" />
-                    <input className="form-input" value={exp.end_date || ''} onChange={e => updateStagedExp(idx, 'end_date', e.target.value)} placeholder="End Date (Optional)" />
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {(exp.stagedBullets || []).map((b: string, bIdx: number) => (
-                      <div key={`b-${bIdx}`} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                        <span style={{ marginTop: '12px', color: 'var(--accent)' }}>•</span>
-                        <textarea 
-                          className="form-input" 
-                          value={b} 
-                          onChange={(e) => updateStagedExpBullet(idx, bIdx, e.target.value)} 
-                          style={{ flex: 1, minHeight: '50px', lineHeight: 1.5 }}
-                        />
-                        <button className="btn btn-secondary" style={{ marginTop: '5px', padding: '10px' }} onClick={() => {
-                          const updated = [...stagedExps]; updated[idx].stagedBullets.splice(bIdx, 1); setStagedExps(updated);
-                        }}>✕</button>
-                      </div>
-                    ))}
-                    <button className="btn btn-secondary" style={{ alignSelf: 'flex-start', marginTop: '5px' }} onClick={() => {
-                      const updated = [...stagedExps]; updated[idx].stagedBullets.push(""); setStagedExps(updated);
-                    }}>+ Add Bullet</button>
+                    <div><label style={labelStyle}>Phone</label><input className="form-input" style={inputStyle} placeholder="+91 XXXXX XXXXX" value={stagedProfile?.phone || ''} onChange={e => setStagedProfile({...stagedProfile, phone: e.target.value})} /></div>
+                    <div><label style={labelStyle}>Professional Summary</label><textarea className="form-input" style={{...inputStyle, minHeight: '70px'}} placeholder="Brief professional summary..." value={stagedProfile?.summary || ''} onChange={e => setStagedProfile({...stagedProfile, summary: e.target.value})} /></div>
                   </div>
                 </div>
-              ))}
-              
-              {/* Projects Iterator */}
-              {stagedProjs.length > 0 && <h3 style={{ marginBottom: '15px', color: 'var(--accent-light)', marginTop: '30px' }}>Projects Block</h3>}
-              {stagedProjs.map((proj, idx) => (
-                <div key={`proj-${idx}`} className="glass-card" style={{ marginBottom: '20px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '15px' }}>
-                    <h4>{proj.title || "Project"}</h4>
-                    <button className="btn btn-secondary" style={{ padding: '4px 10px', fontSize: '0.8rem', borderColor: 'var(--error)', color: 'var(--error)' }} onClick={() => setStagedProjs(stagedProjs.filter((_, i) => i !== idx))}>Remove</button>
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" value={proj.title} onChange={e => updateStagedProj(idx, 'title', e.target.value)} placeholder="Title" />
-                    <input className="form-input" value={proj.tech_stack || ''} onChange={e => updateStagedProj(idx, 'tech_stack', e.target.value)} placeholder="Tech Stack (Comma Separated)" />
-                  </div>
-                  
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    {(proj.stagedBullets || []).map((b: string, bIdx: number) => (
-                      <div key={`proj-b-${bIdx}`} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
-                        <span style={{ marginTop: '12px', color: 'var(--accent)' }}>•</span>
-                        <textarea 
-                          className="form-input" 
-                          value={b} 
-                          onChange={(e) => updateStagedProjBullet(idx, bIdx, e.target.value)} 
-                          style={{ flex: 1, minHeight: '50px', lineHeight: 1.5 }}
-                        />
-                         <button className="btn btn-secondary" style={{ marginTop: '5px', padding: '10px' }} onClick={() => {
-                          const updated = [...stagedProjs]; updated[idx].stagedBullets.splice(bIdx, 1); setStagedProjs(updated);
-                        }}>✕</button>
-                      </div>
-                    ))}
-                    <button className="btn btn-secondary" style={{ alignSelf: 'flex-start', marginTop: '5px' }} onClick={() => {
-                      const updated = [...stagedProjs]; updated[idx].stagedBullets.push(""); setStagedProjs(updated);
-                    }}>+ Add Bullet</button>
-                  </div>
-                </div>
-              ))}
 
+                {/* Social / Portfolio Links */}
+                <div style={{ marginBottom: '20px' }}>
+                  <span style={sectionLabel}>Social / Portfolio Links</span>
+                  {stagedSocials.map((soc, idx) => (
+                    <div key={`social-${idx}`} style={subCard}>
+                      <div style={subCardHeader}>
+                        <span style={subCardLabel}>Link #{idx + 1}{soc.platform_name ? ` · ${soc.platform_name}` : ''}</span>
+                        <button style={removeBtn} onClick={() => setStagedSocials(stagedSocials.filter((_, i) => i !== idx))}>✕ Remove</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                        <div><label style={labelStyle}>Platform</label><input className="form-input" style={inputStyle} placeholder="e.g. GitHub" value={soc.platform_name} onChange={e => { const u = [...stagedSocials]; u[idx].platform_name = e.target.value; setStagedSocials(u); }} /></div>
+                        <div><label style={labelStyle}>Display Text</label><input className="form-input" style={inputStyle} placeholder="Optional label" value={soc.display_text || ''} onChange={e => { const u = [...stagedSocials]; u[idx].display_text = e.target.value; setStagedSocials(u); }} /></div>
+                      </div>
+                      <div><label style={labelStyle}>URL</label><input className="form-input" style={inputStyle} placeholder="https://..." value={soc.url} onChange={e => { const u = [...stagedSocials]; u[idx].url = e.target.value; setStagedSocials(u); }} /></div>
+                    </div>
+                  ))}
+                  <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '7px 14px' }} onClick={() => setStagedSocials([...stagedSocials, { platform_name: '', display_text: '', url: '' }])}>+ Add Social Link</button>
+                </div>
+
+                {/* Education */}
+                <div style={{ marginBottom: '20px' }}>
+                  <span style={sectionLabel}>Education</span>
+                  {stagedEducations.map((edu, idx) => (
+                    <div key={`edu-${idx}`} style={subCard}>
+                      <div style={subCardHeader}>
+                        <span style={subCardLabel}>Education #{idx + 1}{edu.institution ? ` · ${edu.institution}` : ''}</span>
+                        <button style={removeBtn} onClick={() => setStagedEducations(stagedEducations.filter((_, i) => i !== idx))}>✕ Remove</button>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                        <div><label style={labelStyle}>Institution</label><input className="form-input" style={inputStyle} placeholder="University Name" value={edu.institution} onChange={e => { const u = [...stagedEducations]; u[idx].institution = e.target.value; setStagedEducations(u); }} /></div>
+                        <div><label style={labelStyle}>Degree</label><input className="form-input" style={inputStyle} placeholder="B.Tech in CS" value={edu.degree} onChange={e => { const u = [...stagedEducations]; u[idx].degree = e.target.value; setStagedEducations(u); }} /></div>
+                      </div>
+                      <div><label style={labelStyle}>Dates</label><input className="form-input" style={inputStyle} placeholder="Aug 2019 – Jun 2023" value={edu.dates} onChange={e => { const u = [...stagedEducations]; u[idx].dates = e.target.value; setStagedEducations(u); }} /></div>
+                    </div>
+                  ))}
+                  <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '7px 14px' }} onClick={() => setStagedEducations([...stagedEducations, { institution: '', degree: '', dates: '' }])}>+ Add Education</button>
+                </div>
+
+                {/* Technical Skills */}
+                <div style={{ marginBottom: '20px' }}>
+                  <span style={sectionLabel}>Technical Skills</span>
+                  {stagedSkills.map((sg, idx) => (
+                    <div key={`sg-${idx}`} style={subCard}>
+                      <div style={subCardHeader}>
+                        <span style={subCardLabel}>Category #{idx + 1}{sg.category ? ` · ${sg.category}` : ''}</span>
+                        <button style={removeBtn} onClick={() => setStagedSkills(stagedSkills.filter((_, i) => i !== idx))}>✕ Remove</button>
+                      </div>
+                      <div style={{ marginBottom: '8px' }}><label style={labelStyle}>Category Name</label><input className="form-input" style={inputStyle} placeholder="e.g. Languages" value={sg.category} onChange={e => { const u = [...stagedSkills]; u[idx].category = e.target.value; setStagedSkills(u); }} /></div>
+                      <div><label style={labelStyle}>Skills (comma-separated)</label><textarea className="form-input" style={{...inputStyle, minHeight: '50px'}} placeholder="JavaScript, Python, Java..." value={sg.skills.join(', ')} onChange={e => { const u = [...stagedSkills]; u[idx].skills = e.target.value.split(',').map(s => s.trim()); setStagedSkills(u); }} /></div>
+                    </div>
+                  ))}
+                  <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '7px 14px' }} onClick={() => setStagedSkills([...stagedSkills, { category: '', skills: [] }])}>+ Add Skill Category</button>
+                </div>
+
+                {/* Experience */}
+                {stagedExps.length > 0 && <span style={{...sectionLabel, display: 'block', marginTop: '4px'}}>Experience</span>}
+                {stagedExps.map((exp, idx) => (
+                  <div key={`exp-${idx}`} style={{ ...subCard, border: `1px solid ${idx === 0 ? 'rgba(56,226,152,0.35)' : 'var(--glass-border)'}`, marginBottom: '10px' }}>
+                    <div style={subCardHeader}>
+                      <span style={{ ...subCardLabel, color: idx === 0 ? 'var(--success)' : 'var(--accent-light)' }}>Experience #{idx + 1}{idx === 0 ? ' · AI Targeted' : ''}</span>
+                      <button style={removeBtn} onClick={() => setStagedExps(stagedExps.filter((_, i) => i !== idx))}>✕ Remove</button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
+                      <div><label style={labelStyle}>Job Title</label><input className="form-input" style={inputStyle} value={exp.job_title} onChange={e => updateStagedExp(idx, 'job_title', e.target.value)} placeholder="e.g. Software Engineer" /></div>
+                      <div><label style={labelStyle}>Company</label><input className="form-input" style={inputStyle} value={exp.company_name} onChange={e => updateStagedExp(idx, 'company_name', e.target.value)} placeholder="e.g. Google" /></div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                      <div><label style={labelStyle}>Start Date</label><input className="form-input" style={inputStyle} value={exp.start_date} onChange={e => updateStagedExp(idx, 'start_date', e.target.value)} placeholder="e.g. 2022-01" /></div>
+                      <div><label style={labelStyle}>End Date</label><input className="form-input" style={inputStyle} value={exp.end_date || ''} onChange={e => updateStagedExp(idx, 'end_date', e.target.value)} placeholder="Leave blank if current" /></div>
+                    </div>
+                    <label style={labelStyle}>Bullet Points</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                      {(exp.stagedBullets || []).map((b: string, bIdx: number) => (
+                        <div key={`b-${bIdx}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <span style={{ marginTop: '10px', color: 'var(--accent)', flexShrink: 0 }}>•</span>
+                          <textarea className="form-input" value={b} onChange={(e) => updateStagedExpBullet(idx, bIdx, e.target.value)} style={{ flex: 1, minHeight: '46px', lineHeight: 1.5, fontSize: '0.88rem', padding: '8px 12px' }} />
+                          <button style={{ ...removeBtn, marginTop: '8px', flexShrink: 0 }} onClick={() => { const u = [...stagedExps]; u[idx].stagedBullets.splice(bIdx, 1); setStagedExps(u); }}>✕</button>
+                        </div>
+                      ))}
+                      <button className="btn btn-secondary" style={{ alignSelf: 'flex-start', fontSize: '0.78rem', padding: '5px 12px', marginTop: '4px' }} onClick={() => { const u = [...stagedExps]; u[idx].stagedBullets.push(''); setStagedExps(u); }}>+ Add Bullet</button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Projects */}
+                {stagedProjs.length > 0 && <span style={{...sectionLabel, display: 'block', marginTop: '8px'}}>Projects</span>}
+                {stagedProjs.map((proj, idx) => (
+                  <div key={`proj-${idx}`} style={{ ...subCard, marginBottom: '10px' }}>
+                    <div style={subCardHeader}>
+                      <span style={subCardLabel}>Project #{idx + 1}{proj.title ? ` · ${proj.title}` : ''}</span>
+                      <button style={removeBtn} onClick={() => setStagedProjs(stagedProjs.filter((_, i) => i !== idx))}>✕ Remove</button>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
+                      <div><label style={labelStyle}>Project Title</label><input className="form-input" style={inputStyle} value={proj.title} onChange={e => updateStagedProj(idx, 'title', e.target.value)} placeholder="e.g. Book Store App" /></div>
+                      <div><label style={labelStyle}>Tech Stack</label><input className="form-input" style={inputStyle} value={proj.tech_stack || ''} onChange={e => updateStagedProj(idx, 'tech_stack', e.target.value)} placeholder="React, Node.js, MongoDB" /></div>
+                    </div>
+                    <label style={labelStyle}>Bullet Points</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
+                      {(proj.stagedBullets || []).map((b: string, bIdx: number) => (
+                        <div key={`proj-b-${bIdx}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                          <span style={{ marginTop: '10px', color: 'var(--accent)', flexShrink: 0 }}>•</span>
+                          <textarea className="form-input" value={b} onChange={(e) => updateStagedProjBullet(idx, bIdx, e.target.value)} style={{ flex: 1, minHeight: '46px', lineHeight: 1.5, fontSize: '0.88rem', padding: '8px 12px' }} />
+                          <button style={{ ...removeBtn, marginTop: '8px', flexShrink: 0 }} onClick={() => { const u = [...stagedProjs]; u[idx].stagedBullets.splice(bIdx, 1); setStagedProjs(u); }}>✕</button>
+                        </div>
+                      ))}
+                      <button className="btn btn-secondary" style={{ alignSelf: 'flex-start', fontSize: '0.78rem', padding: '5px 12px', marginTop: '4px' }} onClick={() => { const u = [...stagedProjs]; u[idx].stagedBullets.push(''); setStagedProjs(u); }}>+ Add Bullet</button>
+                    </div>
+                  </div>
+                ))}
+
+              </div>
+             
+              {/* ─── Right: PDF Preview (45%) ─── */}
+             <div style={{ width: '45%', background: '#525659', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderLeft: '1px solid rgba(255,255,255,0.05)' }}>
+                {/* PDF mini toolbar */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', background: '#323639', borderBottom: '1px solid rgba(0,0,0,0.5)' }}>
+                  <h3 style={{ fontSize: '0.85rem', color: '#ccc', margin: 0, fontWeight: 500 }}>PDF Preview</h3>
+                  {pdfPreviewUrl && <span style={{ fontSize: '0.7rem', color: '#6c6', background: 'rgba(0,200,100,0.1)', padding: '2px 8px', borderRadius: '20px' }}>● Live</span>}
+                </div>
+                
+                {/* PDF Content — iframe clipped to remove bottom whitespace */}
+                <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+                  {isPreviewLoading && (
+                    <div style={{ position: 'absolute', inset: 0, display: 'flex', justifyContent: 'center', alignItems: 'center', background: 'rgba(50,54,57,0.85)', zIndex: 10 }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                        <div style={{ width: '32px', height: '32px', borderRadius: '50%', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--success)', animation: 'spin 1s linear infinite' }}></div>
+                        <span style={{ color: 'white', fontWeight: 600, fontSize: '0.9rem' }}>Compiling LaTeX...</span>
+                      </div>
+                    </div>
+                  )}
+                  {pdfPreviewUrl ? (
+                    <iframe
+                      src={`${pdfPreviewUrl}#toolbar=0&navpanes=0&scrollbar=0&view=Fit`}
+                      style={{ width: '100%', height: '100%', border: 'none', display: 'block' }}
+                      title="Resume PDF Preview"
+                      scrolling="no"
+                    />
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', height: '100%', color: '#888', gap: '10px' }}>
+                      <span style={{ fontSize: '2rem' }}>📄</span>
+                      <p style={{ fontSize: '0.9rem' }}>No preview yet</p>
+                    </div>
+                  )}
+                </div>
+             </div>
+             
            </div>
         </div>
       )}

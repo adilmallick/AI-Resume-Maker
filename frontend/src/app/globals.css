@@ -4,6 +4,8 @@
   --bg-dark: #05050A;
   --bg-gradient-1: #0A0A14;
   --bg-gradient-2: #14142B;
+  --bg-main: #0A0A14;
+  --bg-card: rgba(20, 20, 40, 0.95);
   
   --accent: #6C5DD3;
   --accent-light: #9488F0;
@@ -17,6 +19,7 @@
   --glass-hover: rgba(255, 255, 255, 0.06);
   
   --danger: #FF6B6B;
+  --error: #FF6B6B;
   --success: #38E298;
 
   --font-outfit: "Outfit", sans-serif;
@@ -337,4 +340,26 @@ input, button, textarea {
   border-radius: 50px;
   font-size: 0.8rem;
   font-weight: 600;
+}
+
+/* Spinner Animation */
+@keyframes spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Custom scrollbar for editor panel */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(108, 93, 211, 0.4);
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(108, 93, 211, 0.7);
 }

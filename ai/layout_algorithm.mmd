@@ -1,0 +1,45 @@
+flowchart TD
+    %% Base Calculations
+    A([Start Algorithm]) --> B[Count Subsections:\n Experiences (E) + Projects (P)]
+    B --> C[Calculate Base Capacity:\n Available_Bullets = Max(2, 20 - 2 * (E + P))]
+    
+    %% Weight Generation
+    C --> D[Generate Importance Weights]
+    D --> E1["Experiences (i=0..N):\n Weight = 3.0 / (i + 1)"]
+    D --> E2["Projects (j=0..M):\n Weight = 1.5 / (j + 1)"]
+    
+    %% Experiences Allocation
+    E1 --> F[Sum Total Weights]
+    E2 --> F
+    F --> G[Process Experiences Allocation]
+    
+    G --> H["Calculate Raw Target:\n round(Available_Bullets * (Weight / Total))"]
+    H --> I{"Is index == 0?"}
+    I -->|Yes| J["Cap at Max 7, Min 2"]
+    I -->|No| K["Cap at Max 6, Min 2"]
+    
+    %% Rollover Logic
+    J --> L[Calculate Unused Rollover]
+    K --> L
+    L --> M["Rollover = Expected_Usage - Actual_Capped_Usage"]
+    
+    %% Projects Allocation
+    M --> N[Process Projects Allocation]
+    N --> O["Calculate Raw Target:\n round(Available_Bullets * (Weight / Total))"]
+    O --> P{"Is index == 0?"}
+    P -->|Yes| Q["Add Rollover to Raw Target"]
+    P -->|No| R["Use Raw Target"]
+    Q --> S["Cap at Max 6, Min 2"]
+    R --> S
+    
+    %% End Output
+    S --> T([Result: Specific bullet counts\n injected into LLM Prompt])
+    
+    classDef default fill:#f9f9f9,stroke:#333,stroke-width:2px,color:#333;
+    classDef process fill:#e1f5fe,stroke:#0288d1,stroke-width:2px,color:#000;
+    classDef calculate fill:#fff3e0,stroke:#f57c00,stroke-width:2px,color:#000;
+    classDef startend fill:#dcedc8,stroke:#689f38,stroke-width:2px,color:#000;
+    
+    class A,T startend;
+    class B,D,G,N process;
+    class C,E1,E2,F,H,M,O calculate;

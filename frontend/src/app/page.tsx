@@ -1,56 +1,10 @@
 "use client";
 
-import { useState } from "react";
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
 
 export default function Home() {
-  const { token, user } = useAuth();
-  const [url, setUrl] = useState("");
-  const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleGenerate(e: React.FormEvent) {
-    e.preventDefault();
-    if (!url.trim()) return;
-
-    if (!token) {
-        setError("You must be logged in to generate a resume.");
-        return;
-    }
-
-    setStatus("loading");
-    setError(null);
-
-    try {
-      const res = await fetch("http://localhost:8000/generate-resume", {
-        method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify({ job_url: url.trim() })
-      });
-
-      if (!res.ok) {
-          throw new Error("Failed to generate resume.");
-      }
-
-      const blob = await res.blob();
-      const downloadUrl = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = downloadUrl;
-      a.download = `Resume_${user?.id?.slice(0,5)}.pdf`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      
-      setStatus("success");
-    } catch (err: any) {
-      setError(err.message || "Failed to generate resume.");
-      setStatus("error");
-    }
-  }
+  const { token } = useAuth();
 
   return (
     <div className="container" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 'calc(100vh - 160px)' }}>
@@ -64,49 +18,20 @@ export default function Home() {
         </p>
       </div>
 
-      <div className="glass-panel" style={{ width: '100%', maxWidth: '650px', padding: '32px' }}>
-        <form onSubmit={handleGenerate}>
-          <div className="form-group" style={{ marginBottom: '20px' }}>
-            <label className="form-label" style={{ fontSize: '1rem', color: 'white' }}>Target Job Listing URL</label>
-            <input
-              type="url"
-              className="form-input"
-              style={{ fontSize: '1.1rem', padding: '16px 20px' }}
-              placeholder="https://jobs.example.com/job-listing"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              required
-              disabled={status === "loading" || !token}
-            />
-          </div>
-          
+      <div className="glass-panel" style={{ width: '100%', maxWidth: '650px', padding: '32px', textAlign: 'center' }}>
           {!token ? (
               <div className="alert alert-error" style={{ justifyContent: 'center', gap: '8px' }}>
                   You must <Link href="/login" className="btn-link" style={{ fontWeight: 'bold' }}>Login</Link> or <Link href="/signup" className="btn-link" style={{ fontWeight: 'bold' }}>Sign Up</Link> to generate tailored resumes.
               </div>
           ) : (
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ width: '100%', fontSize: '1.1rem', padding: '16px' }}
-                disabled={status === "loading" || !url.trim()}
-              >
-              {status === "loading" ? "Analyzing Vault & Synthesizing PDF..." : "Generate Masterpiece ⚡"}
-              </button>
+              <div>
+                  <h3 style={{ marginBottom: '16px' }}>Welcome back to your Vault</h3>
+                  <p style={{ marginBottom: '24px', color: 'var(--text-muted)' }}>Manage your profile, experiences, and generate targeted PDFs directly from your dashboard.</p>
+                  <Link href="/dashboard" className="btn btn-primary" style={{ display: 'inline-block', width: '100%', fontSize: '1.2rem', padding: '16px' }}>
+                      Go to Dashboard ⚡
+                  </Link>
+              </div>
           )}
-        </form>
-
-        {status === "error" && error && (
-          <div className="alert alert-error" style={{ marginTop: '20px', marginBottom: 0 }}>
-            {error}
-          </div>
-        )}
-
-        {status === "success" && (
-          <div className="alert alert-success" style={{ marginTop: '20px', marginBottom: 0 }}>
-            <strong>Success!</strong> Your PDF has been compiled and downloaded securely!
-          </div>
-        )}
       </div>
 
     </div>
