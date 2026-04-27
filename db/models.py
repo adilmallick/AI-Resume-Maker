@@ -41,6 +41,7 @@ class UserProfile(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), unique=True)
     first_name = Column(String(100), nullable=False)
     last_name = Column(String(100), nullable=False)
+    email = Column(String(255))
     phone = Column(String(20))
     location = Column(String(100))
     summary = Column(Text)

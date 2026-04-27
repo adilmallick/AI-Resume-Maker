@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/vault", tags=["vault"])
 class ProfileSchema(BaseModel):
     first_name: str
     last_name: str
+    email: Optional[str] = None
     phone: Optional[str] = None
     location: Optional[str] = None
     summary: Optional[str] = None
@@ -37,6 +38,7 @@ async def update_profile(data: ProfileSchema, user: User = Depends(get_current_u
     
     profile.first_name = data.first_name
     profile.last_name = data.last_name
+    profile.email = data.email
     profile.phone = data.phone
     profile.location = data.location
     profile.summary = data.summary
@@ -76,6 +78,35 @@ async def add_experience(data: ExperienceSchema, user: User = Depends(get_curren
     await db.refresh(new_exp)
     return {"id": str(new_exp.id), **data.dict()}
 
+@router.put("/experiences/{item_id}", response_model=ExperienceSchema)
+async def update_experience(item_id: str, data: ExperienceSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserExperience).where(UserExperience.id == item_id, UserExperience.user_id == user.id))
+    exp = result.scalars().first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    
+    exp.company_name = data.company_name
+    exp.job_title = data.job_title
+    exp.location = data.location
+    exp.start_date = data.start_date
+    exp.end_date = data.end_date
+    exp.is_current = data.is_current
+    exp.raw_description = data.raw_description
+    
+    await db.commit()
+    return {"id": str(exp.id), **data.dict()}
+
+@router.delete("/experiences/{item_id}")
+async def delete_experience(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserExperience).where(UserExperience.id == item_id, UserExperience.user_id == user.id))
+    exp = result.scalars().first()
+    if not exp:
+        raise HTTPException(status_code=404, detail="Experience not found")
+    
+    await db.delete(exp)
+    await db.commit()
+    return {"success": True}
+
 # --- Skills ---
 class SkillSchema(BaseModel):
     id: Optional[str] = None
@@ -94,6 +125,30 @@ async def add_skill(data: SkillSchema, user: User = Depends(get_current_user), d
     await db.commit()
     await db.refresh(new_skill)
     return {"id": str(new_skill.id), "skill_name": new_skill.skill_name, "category": new_skill.category}
+
+@router.put("/skills/{item_id}", response_model=SkillSchema)
+async def update_skill(item_id: str, data: SkillSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserSkill).where(UserSkill.id == item_id, UserSkill.user_id == user.id))
+    skill = result.scalars().first()
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    skill.skill_name = data.skill_name
+    skill.category = data.category
+    
+    await db.commit()
+    return {"id": str(skill.id), "skill_name": skill.skill_name, "category": skill.category}
+
+@router.delete("/skills/{item_id}")
+async def delete_skill(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserSkill).where(UserSkill.id == item_id, UserSkill.user_id == user.id))
+    skill = result.scalars().first()
+    if not skill:
+        raise HTTPException(status_code=404, detail="Skill not found")
+    
+    await db.delete(skill)
+    await db.commit()
+    return {"success": True}
 
 # --- Projects ---
 class ProjectSchema(BaseModel):
@@ -126,6 +181,34 @@ async def add_project(data: ProjectSchema, user: User = Depends(get_current_user
     await db.refresh(new_proj)
     return {"id": str(new_proj.id), **data.dict()}
 
+@router.put("/projects/{item_id}", response_model=ProjectSchema)
+async def update_project(item_id: str, data: ProjectSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserProject).where(UserProject.id == item_id, UserProject.user_id == user.id))
+    proj = result.scalars().first()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    proj.title = data.title
+    proj.role = data.role
+    proj.repository_url = data.repository_url
+    proj.live_demo_url = data.live_demo_url
+    proj.tech_stack = data.tech_stack
+    proj.raw_description = data.raw_description
+    
+    await db.commit()
+    return {"id": str(proj.id), **data.dict()}
+
+@router.delete("/projects/{item_id}")
+async def delete_project(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserProject).where(UserProject.id == item_id, UserProject.user_id == user.id))
+    proj = result.scalars().first()
+    if not proj:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    await db.delete(proj)
+    await db.commit()
+    return {"success": True}
+
 # --- Education ---
 class EducationSchema(BaseModel):
     id: Optional[str] = None
@@ -155,6 +238,33 @@ async def add_education(data: EducationSchema, user: User = Depends(get_current_
     await db.refresh(new_edu)
     return {"id": str(new_edu.id), **data.dict()}
 
+@router.put("/educations/{item_id}", response_model=EducationSchema)
+async def update_education(item_id: str, data: EducationSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserEducation).where(UserEducation.id == item_id, UserEducation.user_id == user.id))
+    edu = result.scalars().first()
+    if not edu:
+        raise HTTPException(status_code=404, detail="Education not found")
+    
+    edu.institution = data.institution
+    edu.degree = data.degree
+    edu.field_of_study = data.field_of_study
+    edu.start_date = data.start_date
+    edu.end_date = data.end_date
+    
+    await db.commit()
+    return {"id": str(edu.id), **data.dict()}
+
+@router.delete("/educations/{item_id}")
+async def delete_education(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserEducation).where(UserEducation.id == item_id, UserEducation.user_id == user.id))
+    edu = result.scalars().first()
+    if not edu:
+        raise HTTPException(status_code=404, detail="Education not found")
+    
+    await db.delete(edu)
+    await db.commit()
+    return {"success": True}
+
 # --- Social Links ---
 class SocialLinkSchema(BaseModel):
     id: Optional[str] = None
@@ -183,4 +293,31 @@ async def add_social(data: SocialLinkSchema, user: User = Depends(get_current_us
     await db.commit()
     await db.refresh(new_social)
     return {"id": str(new_social.id), **data.dict()}
+
+@router.put("/socials/{item_id}", response_model=SocialLinkSchema)
+async def update_social(item_id: str, data: SocialLinkSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserSocialLink).where(UserSocialLink.id == item_id, UserSocialLink.user_id == user.id))
+    social = result.scalars().first()
+    if not social:
+        raise HTTPException(status_code=404, detail="Social Link not found")
+    
+    social.platform_name = data.platform_name
+    social.url = data.url
+    social.display_text = data.display_text
+    social.is_active = data.is_active
+    social.sort_order = data.sort_order
+    
+    await db.commit()
+    return {"id": str(social.id), **data.dict()}
+
+@router.delete("/socials/{item_id}")
+async def delete_social(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(UserSocialLink).where(UserSocialLink.id == item_id, UserSocialLink.user_id == user.id))
+    social = result.scalars().first()
+    if not social:
+        raise HTTPException(status_code=404, detail="Social Link not found")
+    
+    await db.delete(social)
+    await db.commit()
+    return {"success": True}
 

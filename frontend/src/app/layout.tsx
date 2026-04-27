@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { AuthProvider } from '@/contexts/AuthContext';
-import Navbar from "@/components/Navbar";
+import { ThemeProvider } from '@/contexts/ThemeContext';
+import AppContainer from "@/components/AppContainer";
 
 export const metadata: Metadata = {
   title: "ResumeVault | AI Career AI",
@@ -14,12 +15,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body>
-        <AuthProvider>
-          <Navbar />
-          <div className="page-wrapper">
-            {children}
-          </div>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <AppContainer>
+              {children}
+            </AppContainer>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

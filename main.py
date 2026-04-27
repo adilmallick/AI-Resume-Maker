@@ -34,10 +34,12 @@ app.add_middleware(
 # ── Routers ────────────────────────────────────────────────────────────────
 from auth.router import router as auth_router
 from api.routers import router as vault_router
+from api.resume_upload import router as resume_upload_router
 
 app.include_router(pdf_router)
 app.include_router(auth_router)
 app.include_router(vault_router)
+app.include_router(resume_upload_router)
 
 class ScrapeRequest(BaseModel):
     url: str
@@ -74,7 +76,8 @@ async def scrape_job(request: ScrapeRequest):
         return ScrapeResponse(success=False, error=str(e))
 
 class ResumeGenerationRequest(BaseModel):
-    job_url: str
+    job_url: str | None = None
+    job_text: str | None = None
 
 from ai.llm.ollama_provider import OllamaProvider
 from ai.llm.gemma_ollama_provider import GemmaOllamaProvider
@@ -138,11 +141,9 @@ async def generate_resume_endpoint(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    url = request.job_url.strip()
-    if not url.startswith(("http://", "https://")):
-         raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+    if not request.job_url and not request.job_text:
+         raise HTTPException(status_code=400, detail="Must provide either job_url or job_text")
          
-    logger.info(f"Generating resume for {url}")
     try:
         # Fetch all user vault data
         exps = (await db.execute(select(UserExperience).where(UserExperience.user_id == current_user.id))).scalars().all()
@@ -188,13 +189,26 @@ async def generate_resume_endpoint(
             for s in skills_rows
         ]
 
-        # Scrape the job description
-        job_data = await asyncio.to_thread(extract_job_info, url)
-        job_description = (
-            f"Title: {job_data.get('title')}\n"
-            f"Description:\n{job_data.get('description')}\n"
-            f"Requirements:\n{', '.join(job_data.get('requirements', []))}"
-        )
+        # Get the job description
+        job_description = ""
+        if request.job_text:
+            job_description = request.job_text
+        else:
+            url = request.job_url.strip()
+            if not url.startswith(("http://", "https://")):
+                 raise HTTPException(status_code=400, detail="URL must start with http:// or https://")
+            
+            logger.info(f"Generating resume for {url}")
+            try:
+                job_data = await asyncio.to_thread(extract_job_info, url)
+                job_description = (
+                    f"Title: {job_data.get('title')}\n"
+                    f"Description:\n{job_data.get('description')}\n"
+                    f"Requirements:\n{', '.join(job_data.get('requirements', []))}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to scrape job URL: {e}")
+                raise HTTPException(status_code=400, detail="Bot prevention blocked scraping. Please paste the raw job description instead.")
 
         # Run AI Pipeline with full context
         ai_response = await asyncio.to_thread(

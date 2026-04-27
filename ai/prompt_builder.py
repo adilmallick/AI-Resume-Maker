@@ -152,7 +152,8 @@ TASK 3 — "experiences":
   For EACH work experience, write the requested number of highly detailed bullet points (see TARGET BULLET COUNT under each experience) that:
   - START with a STRONG past-tense action verb (Engineered, Architected, Optimized, Delivered...).
   - Highlight extensive context, the exact technologies used, and the business impact.
-  - Include specific IMPACT or METRICS where possible (e.g. "reducing computational latency by 40% and saving $10k recurring cloud costs").
+  - Include specific IMPACT or METRICS where possible. Key achievements (with metrics) make impact instantly visible (e.g. "Improved API response time by 40%, reducing latency from 500ms to 300ms", "Increased user retention by 25% using personalized recommendations").
+  - IMPORTANT: Highlight key technical skills, tools, and metrics by wrapping them in HTML bold tags (e.g., "built with <b>AWS</b>", "reduced latency by <b>40%</b>").
   - Incorporate relevant job keywords naturally.
   - MUST be dense and comprehensive, between 25-45 words each.
   - Sound like a principal/senior engineer wrote them.
@@ -162,6 +163,7 @@ TASK 4 — "projects":
   For EACH project, write the requested number of highly detailed bullet points (see TARGET BULLET COUNT under each project) that:
   - Deeply describe WHAT was built, HOW it was built, the architecture, and WHY it matters.
   - Use extensive technical vocabulary appropriate for the role.
+  - IMPORTANT: Wrap all technical frameworks, languages, and key metrics in HTML bold tags (e.g., <b>React</b>, <b>Node.js</b>).
   - MUST be between 20-35 words each.
   - Start with a strong action verb.
   - DO NOT copy the raw description text.

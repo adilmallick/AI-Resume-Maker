@@ -165,15 +165,38 @@ async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
 
     # Social Links
     social_block = ""
-    for s in request.social_links:
+    for i, s in enumerate(request.social_links):
         display = s.display_text if s.display_text else s.url.replace("https://", "").replace("http://", "")
-        social_block += f" $|$ \\href{{{sanitize(s.url)}}}{{\\underline{{{sanitize(display)}}}}}"
+        # Map platform name to fontawesome5 icon
+        p_name = s.platform_name.lower()
+        if "github" in p_name:
+            icon = "\\faGithub"
+        elif "linkedin" in p_name:
+            icon = "\\faLinkedin"
+        elif "twitter" in p_name or "x" == p_name:
+            icon = "\\faTwitter"
+        elif "youtube" in p_name:
+            icon = "\\faYoutube"
+        else:
+            icon = "\\faLink"
+            
+        separator = " $|$ " if i > 0 or request.candidate_location or request.candidate_email or request.candidate_phone else ""
+        social_block += f"{separator}{icon} \\hspace{{2pt}} \\href{{{sanitize(s.url)}}}{{\\underline{{{sanitize(display)}}}}}"
+
+    # Format phone, email, location with icons
+    phone_fmt = f"\\faPhone \\hspace{{2pt}} {sanitize(request.candidate_phone)}" if request.candidate_phone else ""
+    
+    email_sep = " $|$ " if phone_fmt and request.candidate_email else ""
+    email_fmt = f"{email_sep}\\faEnvelope \\hspace{{2pt}} \\href{{mailto:{sanitize(request.candidate_email)}}}{{\\underline{{{sanitize(request.candidate_email)}}}}}" if request.candidate_email else ""
+    
+    loc_sep = " $|$ " if (phone_fmt or email_fmt) and request.candidate_location else ""
+    loc_fmt = f"{loc_sep}\\faMapMarker* \\hspace{{2pt}} {sanitize(request.candidate_location)}" if request.candidate_location else ""
 
     data = {
         "CANDIDATE_NAME":     sanitize(request.candidate_name),
-        "CANDIDATE_EMAIL":    sanitize(request.candidate_email),
-        "CANDIDATE_PHONE":    sanitize(request.candidate_phone),
-        "CANDIDATE_LOCATION": sanitize(request.candidate_location),
+        "CANDIDATE_EMAIL":    email_fmt,
+        "CANDIDATE_PHONE":    phone_fmt,
+        "CANDIDATE_LOCATION": loc_fmt,
         "SOCIAL_LINKS_BLOCK": social_block,
         "SUMMARY_BLOCK":      summary_block,
         "EXPERIENCES_BLOCK":  exp_block,
