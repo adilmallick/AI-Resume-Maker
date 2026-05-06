@@ -683,13 +683,24 @@ export default function DashboardPage() {
       setStagedProjs(updated);
   };
 
+  const formatDisplayDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '';
+    return dateStr.replace(/\b(\d{4}-\d{2}(?:-\d{2})?)\b/g, (match) => {
+      const d = new Date(match);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      return match;
+    });
+  };
+
   const handleGeneratePreview = async () => {
     setIsPreviewLoading(true);
     try {
       const formattedExps = stagedExps.map((exp) => ({
         company: exp.company_name || '',
         title: exp.job_title || '',
-        dates: `${exp.start_date || ''} -- ${exp.end_date || 'Present'}`,
+        dates: `${formatDisplayDate(exp.start_date)} -- ${formatDisplayDate(exp.end_date) || 'Present'}`.replace(/^ -- /, ''),
         location: exp.location || '', 
         bullets: (exp.stagedBullets || []).filter((s: string) => s.trim())
       }));
@@ -697,7 +708,7 @@ export default function DashboardPage() {
       const formattedProjs = stagedProjs.map((proj) => ({
         title: proj.title || '',
         role: proj.role || '',
-        dates: proj.start_date ? `${proj.start_date} -- ${proj.end_date || 'Present'}` : '', 
+        dates: proj.start_date ? `${formatDisplayDate(proj.start_date)} -- ${formatDisplayDate(proj.end_date) || 'Present'}` : '', 
         tech_stack: proj.tech_stack || '',
         repository_url: proj.repository_url || '',
         live_demo_url: proj.live_demo_url || '',
@@ -715,7 +726,7 @@ export default function DashboardPage() {
         education_blocks: stagedEducations.filter(e => e.institution?.trim() !== "").map(e => ({
           institution: e.institution || '',
           degree: e.degree || '',
-          dates: e.dates || `${e.start_date || ''} -- ${e.end_date || 'Present'}`
+          dates: formatDisplayDate(e.dates) || `${formatDisplayDate(e.start_date)} -- ${formatDisplayDate(e.end_date) || 'Present'}`.replace(/^ -- /, '')
         })),
         grouped_skills: stagedSkills,
         social_links: stagedSocials

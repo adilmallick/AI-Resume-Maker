@@ -1,5 +1,8 @@
+import { useState, useEffect, useRef } from 'react';
 import RichTextEditor from '@/components/RichTextEditor';
 import ExtractedDataViewer from '@/components/ExtractedDataViewer';
+import { ATSResult } from '@/types/ats';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface ReviewWorkspaceProps {
   // Staged data
@@ -20,6 +23,8 @@ interface ReviewWorkspaceProps {
   isPreviewLoading: boolean;
   isDirty: boolean;
   genError: string | null;
+  // ATS
+  targetJobInput: string;
   // Actions
   onRecompile: () => void;
   onDownload: () => void;
@@ -37,9 +42,79 @@ const removeBtn: React.CSSProperties = { background: 'none', border: 'none', col
 export default function ReviewWorkspace({
   stagedProfile, stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials,
   setStagedProfile, setStagedExps, setStagedProjs, setStagedEducations, setStagedSkills, setStagedSocials,
-  pdfPreviewUrl, isPreviewLoading, isDirty, genError,
+  pdfPreviewUrl, isPreviewLoading, isDirty, genError, targetJobInput,
   onRecompile, onDownload, onClose,
 }: ReviewWorkspaceProps) {
+
+  const { token } = useAuth();
+  const [atsStatus, setAtsStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [atsResult, setAtsResult] = useState<ATSResult | null>(null);
+  const [isAtsDirty, setIsAtsDirty] = useState(false);
+  const [openTitleIdx, setOpenTitleIdx] = useState<number | null>(null);
+  const atsSnapshot = useRef<string>('');
+  const atsInitialized = useRef(false);
+
+  // Build a snapshot of data that affects ATS score (skills, exp bullets, proj bullets, summary)
+  const buildAtsSnapshot = () => JSON.stringify({
+    summary: stagedProfile?.summary,
+    skills: stagedSkills,
+    expBullets: stagedExps.map(e => e.stagedBullets),
+    projBullets: stagedProjs.map(p => p.stagedBullets),
+  });
+
+  // Watch ATS-relevant fields and mark dirty after first score load
+  useEffect(() => {
+    const current = buildAtsSnapshot();
+    if (!atsInitialized.current) return; // wait until first score is loaded
+    setIsAtsDirty(current !== atsSnapshot.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedProfile?.summary, stagedSkills, stagedExps, stagedProjs]);
+
+  const handleCheckATS = async () => {
+    if (!token) return;
+    setAtsStatus('loading');
+    try {
+      const payload = {
+        job_input: targetJobInput,
+        resume_data: {
+          profile: stagedProfile,
+          experiences: stagedExps,
+          projects: stagedProjs,
+          educations: stagedEducations,
+          skills: stagedSkills
+        }
+      };
+
+      const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+      const res = await fetch(`${API_URL}/api/ats/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to calculate ATS score');
+      }
+
+      const data = await res.json();
+      setAtsResult(data);
+      setAtsStatus('idle');
+      // Save snapshot and mark clean after a successful score
+      atsSnapshot.current = buildAtsSnapshot();
+      atsInitialized.current = true;
+      setIsAtsDirty(false);
+    } catch (err) {
+      console.error(err);
+      setAtsStatus('error');
+    }
+  };
+
+  // Auto-run ATS score on mount
+  useEffect(() => {
+    if (targetJobInput) handleCheckATS();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const updateStagedExp = (idx: number, field: string, val: any) => {
     const updated = [...stagedExps]; updated[idx][field] = val; setStagedExps(updated);
@@ -68,6 +143,17 @@ export default function ReviewWorkspace({
           <button className="btn btn-secondary" onClick={onClose} style={{ padding: '6px 15px', fontSize: '0.9rem' }}>Cancel</button>
           <button
             className="btn btn-secondary"
+            onClick={handleCheckATS}
+            disabled={atsStatus === 'loading'}
+            style={{ position: 'relative', padding: '6px 15px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+          >
+            {isAtsDirty && atsStatus !== 'loading' && (
+              <span style={{ position: 'absolute', top: '-5px', right: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 6px rgba(239,68,68,0.8)', display: 'block' }} />
+            )}
+            {atsStatus === 'loading' ? 'Scoring...' : '🎯 Check ATS Score'}
+          </button>
+          <button
+            className="btn btn-secondary"
             onClick={onRecompile}
             disabled={isPreviewLoading}
             style={{ position: 'relative', padding: '6px 15px', fontSize: '0.9rem', background: 'rgba(108, 93, 211, 0.2)' }}
@@ -86,6 +172,174 @@ export default function ReviewWorkspace({
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* Left: Editor Panel */}
         <div style={{ width: '55%', overflowY: 'auto', padding: '20px 24px' }} className="custom-scrollbar">
+
+          {/* ATS Score Panel */}
+          {(atsStatus === 'loading' || atsResult || atsStatus === 'error') && (
+            <div style={{ marginBottom: '20px', background: 'rgba(108, 93, 211, 0.08)', border: '1px solid var(--accent)', borderRadius: '10px', padding: '16px', position: 'relative' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--accent-light)' }}>ATS Match Score</h3>
+                <button style={removeBtn} onClick={() => { setAtsResult(null); setAtsStatus('idle'); }}>✕ Close</button>
+              </div>
+
+              {atsStatus === 'loading' ? (
+                <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Analyzing resume against job description...</div>
+              ) : atsStatus === 'error' ? (
+                <div style={{ color: 'var(--error)', fontSize: '0.9rem' }}>Failed to calculate score. Check connection or job description.</div>
+              ) : atsResult && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                    {/* Score Circle */}
+                    <div style={{ position: 'relative', width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <svg width="80" height="80" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
+                        <circle cx="50" cy="50" r="45" fill="none" stroke={atsResult.overall_score >= 80 ? 'var(--success)' : atsResult.overall_score >= 60 ? '#eab308' : 'var(--error)'} strokeWidth="8" strokeDasharray={`${2 * Math.PI * 45}`} strokeDashoffset={`${2 * Math.PI * 45 * (1 - atsResult.overall_score / 100)}`} strokeLinecap="round" transform="rotate(-90 50 50)" style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
+                      </svg>
+                      <div style={{ position: 'absolute', fontSize: '1.4rem', fontWeight: 700 }}>{atsResult.overall_score}%</div>
+                    </div>
+
+                    {/* Dimension Bars */}
+                    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                      {[
+                        { label: 'Keywords', score: atsResult.keyword_score, help: 'Percentage of job keywords found in your bullets and descriptions.' },
+                        { label: 'Skills', score: atsResult.skill_score, help: 'Percentage of required skills found in your explicit Skills section.' },
+                        { label: 'Title Match', score: atsResult.title_score, help: 'How well your past job titles match the target role.' },
+                        { label: 'Completeness', score: atsResult.completeness_score, help: 'Presence of standard resume sections (Summary, Experience, Projects, etc.).' }
+                      ].map((dim, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <span style={{ width: '110px', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }} title={dim.help}>
+                            {dim.label}
+                            <span style={{ cursor: 'help', fontSize: '0.65rem', opacity: 0.6 }}>ⓘ</span>
+                          </span>
+                          <div style={{ flex: 1, height: '6px', background: 'var(--glass-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                            <div style={{ width: `${dim.score}%`, height: '100%', background: 'var(--accent)', borderRadius: '3px' }} />
+                          </div>
+                          <span style={{ width: '30px', fontSize: '0.75rem', textAlign: 'right' }}>{dim.score}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Keywords */}
+                  <div style={{ fontSize: '0.8rem' }}>
+                    <div style={{ marginBottom: '6px', fontWeight: 600 }}>Matched Keywords & Skills:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {atsResult.matched_keywords.length > 0 ? atsResult.matched_keywords.map((k, i) => (
+                        <span key={i} style={{ background: 'rgba(56, 226, 152, 0.15)', color: 'var(--success)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>✓ {k}</span>
+                      )) : <span style={{ color: 'var(--text-muted)' }}>None found</span>}
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: '0.8rem' }}>
+                    <div style={{ marginBottom: '6px', fontWeight: 600 }}>Missing Keywords & Skills:</div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                      {atsResult.missing_keywords.length > 0 ? atsResult.missing_keywords.map((k, i) => (
+                        <span key={i} style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>✕ {k}</span>
+                      )) : <span style={{ color: 'var(--success)' }}>All keywords matched!</span>}
+                    </div>
+                  </div>
+
+                  {/* Suggested Titles — Interactive */}
+                  {atsResult.title_score < 100 && (
+                    <div style={{ fontSize: '0.8rem', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '8px', padding: '10px 14px' }}>
+                      <div style={{ fontWeight: 600, color: '#eab308', marginBottom: '4px' }}>💼 Suggested Job Titles</div>
+                      <div style={{ color: 'var(--text-muted)', marginBottom: '8px', fontSize: '0.75rem' }}>
+                        Click a title to apply it to an experience entry to boost your Title Match score.
+                      </div>
+                      {(atsResult.suggested_titles?.length ?? 0) > 0 ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {(atsResult.suggested_titles ?? []).map((title, i) => (
+                            <div key={i} style={{ position: 'relative', display: 'inline-block' }}>
+                              <button
+                                onClick={() => setOpenTitleIdx(openTitleIdx === i ? null : i)}
+                                style={{
+                                  background: 'rgba(234,179,8,0.15)', color: '#eab308',
+                                  padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem',
+                                  cursor: 'pointer', border: '1px solid rgba(234,179,8,0.4)'
+                                }}
+                              >
+                                {title} ▾
+                              </button>
+                              {openTitleIdx === i && (
+                                <div style={{
+                                  position: 'absolute', top: '100%', left: 0, zIndex: 10,
+                                  background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                                  borderRadius: '8px', padding: '6px', minWidth: '220px',
+                                  boxShadow: '0 4px 20px rgba(0,0,0,0.4)', marginTop: '4px'
+                                }}>
+                                  <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', padding: '2px 6px', marginBottom: '4px' }}>Apply to:</div>
+
+                                  <button
+                                    style={{
+                                      display: 'block', width: '100%', textAlign: 'left',
+                                      background: 'none', border: 'none', cursor: 'pointer',
+                                      padding: '5px 8px', fontSize: '0.78rem', color: 'var(--text-main)',
+                                      borderRadius: '4px', marginBottom: '4px'
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(108,93,211,0.15)')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                                    onClick={() => {
+                                      const currentSummary = stagedProfile?.summary || '';
+                                      if (!currentSummary.includes(title)) {
+                                        setStagedProfile({ ...stagedProfile, summary: currentSummary ? `${title} | ${currentSummary}` : title });
+                                      }
+                                      setOpenTitleIdx(null); // close after selecting
+                                    }}
+                                  >
+                                    📝 Professional Summary
+                                  </button>
+
+                                  <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />
+
+                                  {stagedExps.length === 0 && (
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 6px' }}>No experiences found.</div>
+                                  )}
+                                  {stagedExps.map((exp, expIdx) => (
+                                    <button
+                                      key={expIdx}
+                                      style={{
+                                        display: 'block', width: '100%', textAlign: 'left',
+                                        background: 'none', border: 'none', cursor: 'pointer',
+                                        padding: '5px 8px', fontSize: '0.78rem', color: 'var(--text-main)',
+                                        borderRadius: '4px'
+                                      }}
+                                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(108,93,211,0.15)')}
+                                      onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                                      onClick={() => {
+                                        const updated = [...stagedExps];
+                                        updated[expIdx].job_title = title;
+                                        setStagedExps(updated);
+                                        setOpenTitleIdx(null); // close after selecting
+                                      }}
+                                    >
+                                      💼 #{expIdx + 1} · {exp.company_name || 'Unnamed'} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({exp.job_title || 'No title'})</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                          Update your experience job titles to more closely reflect the target role's language.
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Tips */}
+                  {atsResult.tips.length > 0 && (
+                    <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: '8px' }}>
+                      <strong style={{ display: 'block', fontSize: '0.8rem', color: '#eab308', marginBottom: '6px' }}>💡 Tips to Improve</strong>
+                      <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem', color: 'var(--text-main)' }}>
+                        {atsResult.tips.map((tip, i) => <li key={i} style={{ marginBottom: '4px' }}>{tip}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Header Block */}
           <div style={{ marginBottom: '20px' }}>
@@ -152,7 +406,7 @@ export default function ReviewWorkspace({
                   <button style={removeBtn} onClick={() => setStagedSkills(stagedSkills.filter((_, i) => i !== idx))}>✕ Remove</button>
                 </div>
                 <div style={{ marginBottom: '8px' }}><label style={labelStyle}>Category Name</label><input className="form-input" style={inputStyle} placeholder="e.g. Languages" value={sg.category} onChange={e => { const u = [...stagedSkills]; u[idx].category = e.target.value; setStagedSkills(u); }} /></div>
-                <div><label style={labelStyle}>Skills (comma-separated)</label><textarea className="form-input" style={{ ...inputStyle, minHeight: '50px' }} placeholder="JavaScript, Python, Java..." value={sg.skills.join(', ')} onChange={e => { const u = [...stagedSkills]; u[idx].skills = e.target.value.split(',').map(s => s.trim()); setStagedSkills(u); }} /></div>
+                <div><label style={labelStyle}>Skills (comma-separated)</label><textarea className="form-input" style={{ ...inputStyle, minHeight: '50px' }} placeholder="JavaScript, Python, Java..." value={(sg as any)._rawString !== undefined ? (sg as any)._rawString : sg.skills.join(', ')} onChange={e => { const u = [...stagedSkills]; (u[idx] as any)._rawString = e.target.value; u[idx].skills = e.target.value.split(',').map(s => s.trim()).filter(Boolean); setStagedSkills(u); }} /></div>
               </div>
             ))}
             <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '7px 14px' }} onClick={() => setStagedSkills([...stagedSkills, { category: '', skills: [] }])}>+ Add Skill Category</button>
