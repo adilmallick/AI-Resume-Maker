@@ -79,6 +79,10 @@ class ResumeGenerationRequest(BaseModel):
     job_url: str | None = None
     job_text: str | None = None
 
+class ATSScoreRequest(BaseModel):
+    job_input: str
+    resume_data: dict
+
 from ai.llm.ollama_provider import OllamaProvider
 from ai.llm.gemma_ollama_provider import GemmaOllamaProvider
 from ai.llm.llama_groq_provider import LlamaGroqProvider
@@ -227,4 +231,28 @@ async def generate_resume_endpoint(
         return ai_response
     except Exception as e:
         logger.error(f"Resume generation failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+from ai.ats_scorer import ATSScorer
+
+@app.post("/api/ats/score")
+async def ats_score_endpoint(
+    request: ATSScoreRequest,
+    current_user: User = Depends(get_current_user)
+):
+    try:
+        job_description = request.job_input
+        if request.job_input.startswith(("http://", "https://")):
+            job_data = await asyncio.to_thread(extract_job_info, request.job_input)
+            job_description = (
+                f"Title: {job_data.get('title')}\n"
+                f"Description:\n{job_data.get('description')}\n"
+                f"Requirements:\n{', '.join(job_data.get('requirements', []))}"
+            )
+        
+        scorer = ATSScorer(keyword_extractor=resume_pipeline.extractor)
+        result = await asyncio.to_thread(scorer.score, request.resume_data, job_description)
+        return result
+    except Exception as e:
+        logger.error(f"ATS Score failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))

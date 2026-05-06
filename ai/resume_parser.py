@@ -23,8 +23,8 @@ class ParsedExperience(BaseModel):
     company_name: str
     job_title: str
     location: Optional[str] = None
-    start_date: str = Field(description="Format YYYY-MM-DD or Month YYYY")
-    end_date: Optional[str] = Field(None, description="Format YYYY-MM-DD, Month YYYY, or leave null if current")
+    start_date: str = Field(description="Format MMM YYYY (e.g., Aug 2019)")
+    end_date: Optional[str] = Field(None, description="Format MMM YYYY (e.g., Jun 2023), or leave null if current")
     is_current: bool = False
     raw_description: Optional[str] = Field(None, description="The job description or responsibilities. IMPORTANT: You MUST output this as an HTML unordered list. E.g. '<ul><li>Developed API</li><li>Fixed bugs</li></ul>'. If none, leave null.")
 
@@ -44,8 +44,8 @@ class ParsedEducation(BaseModel):
     institution: str
     degree: str
     field_of_study: str
-    start_date: str = Field(description="Format YYYY-MM-DD or YYYY")
-    end_date: Optional[str] = Field(None, description="Format YYYY-MM-DD or YYYY")
+    start_date: str = Field(description="Format MMM YYYY (e.g., Aug 2019)")
+    end_date: Optional[str] = Field(None, description="Format MMM YYYY (e.g., Jun 2023)")
 
 class ResumeExtractionSchema(BaseModel):
     profile: ParsedProfile

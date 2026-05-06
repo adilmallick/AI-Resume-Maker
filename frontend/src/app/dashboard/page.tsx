@@ -56,8 +56,10 @@ export default function DashboardPage() {
   const [resumeMergeStrategy, setResumeMergeStrategy] = useState<'append' | 'overwrite'>('append');
 
   // ── Dirty-check helpers ───────────────────────────────────────────────────
-  const buildSnapshot = (p: any, e: any[], pr: any[], ed: any[], sk: any[], so: any[]) =>
-    JSON.stringify({ p, e, pr, ed, sk, so });
+  // Profile changes are intentionally excluded — only content sections (experience,
+  // projects, education, skills, socials) trigger the recompile indicator.
+  const buildSnapshot = (e: any[], pr: any[], ed: any[], sk: any[], so: any[]) =>
+    JSON.stringify({ e, pr, ed, sk, so });
 
   useEffect(() => {
     if (isReviewing) { stagingInitialized.current = false; setIsDirty(false); }
@@ -65,9 +67,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isReviewing) return;
-    const current = buildSnapshot(stagedProfile, stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials);
+    const current = buildSnapshot(stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials);
     if (!stagingInitialized.current) { compiledSnapshot.current = current; stagingInitialized.current = true; return; }
     setIsDirty(current !== compiledSnapshot.current);
+    // stagedProfile is intentionally kept in deps to maintain array size, but excluded from snapshot
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stagedProfile, stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials]);
 
@@ -152,6 +155,17 @@ export default function DashboardPage() {
   };
 
   // ── PDF Preview ────────────────────────────────────────────────────────────
+  const formatDisplayDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return '';
+    return dateStr.replace(/\b(\d{4}-\d{2}(?:-\d{2})?)\b/g, (match) => {
+      const d = new Date(match);
+      if (!isNaN(d.getTime())) {
+        return d.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+      }
+      return match;
+    });
+  };
+
   const handleGeneratePreview = async () => {
     setIsPreviewLoading(true);
     try {
@@ -163,18 +177,18 @@ export default function DashboardPage() {
         candidate_summary: stagedProfile?.summary || '',
         experiences: stagedExps.map(exp => ({
           company: exp.company_name || '', title: exp.job_title || '',
-          dates: `${exp.start_date || ''} -- ${exp.end_date || 'Present'}`,
+          dates: `${formatDisplayDate(exp.start_date)} -- ${formatDisplayDate(exp.end_date) || 'Present'}`.replace(/^ -- /, ''),
           location: exp.location || '', bullets: (exp.stagedBullets || []).filter((s: string) => s.trim()),
         })),
         projects: stagedProjs.map(proj => ({
           title: proj.title || '', role: proj.role || '',
-          dates: proj.start_date ? `${proj.start_date} -- ${proj.end_date || 'Present'}` : '',
+          dates: proj.start_date ? `${formatDisplayDate(proj.start_date)} -- ${formatDisplayDate(proj.end_date) || 'Present'}` : '',
           tech_stack: proj.tech_stack || '', repository_url: proj.repository_url || '',
           live_demo_url: proj.live_demo_url || '', bullets: (proj.stagedBullets || []).filter((s: string) => s.trim()),
         })),
         education_blocks: stagedEducations.filter(e => e.institution?.trim() !== '').map(e => ({
           institution: e.institution || '', degree: e.degree || '',
-          dates: e.dates || `${e.start_date || ''} -- ${e.end_date || 'Present'}`,
+          dates: formatDisplayDate(e.dates) || `${formatDisplayDate(e.start_date)} -- ${formatDisplayDate(e.end_date) || 'Present'}`.replace(/^ -- /, ''),
         })),
         grouped_skills: stagedSkills,
         social_links: stagedSocials,
@@ -185,7 +199,7 @@ export default function DashboardPage() {
 
       const blob = await res.blob();
       setPdfPreviewUrl(window.URL.createObjectURL(blob));
-      compiledSnapshot.current = buildSnapshot(stagedProfile, stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials);
+      compiledSnapshot.current = buildSnapshot(stagedExps, stagedProjs, stagedEducations, stagedSkills, stagedSocials);
       setIsDirty(false);
       setGenError(null);
     } catch (err: any) {
@@ -196,7 +210,7 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    if (isReviewing && !pdfPreviewUrl) handleGeneratePreview();
+    if (isReviewing) handleGeneratePreview();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReviewing]);
 
@@ -326,6 +340,7 @@ export default function DashboardPage() {
           isPreviewLoading={isPreviewLoading}
           isDirty={isDirty}
           genError={genError}
+          targetJobInput={url}
           onRecompile={handleGeneratePreview}
           onDownload={handleDownloadPdf}
           onClose={() => setIsReviewing(false)}
