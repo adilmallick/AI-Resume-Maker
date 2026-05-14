@@ -65,7 +65,7 @@ export default function DashboardPage() {
   // We'll manage stagedSkills as a grouped format: [{category: "Languages", skills: ["JS", "TS"]}, ...]
   const [stagedSkills, setStagedSkills] = useState<{ category: string, skills: string[] }[]>([]);
   const [stagedSocials, setStagedSocials] = useState<any[]>([]);
-  const [stagedTemplateConfig, setStagedTemplateConfig] = useState({ font_size: "11pt", font_family: "sans-serif" });
+  const [stagedTemplateConfig, setStagedTemplateConfig] = useState<{font_size: string, font_family: string, section_order: string[]}>({ font_size: "11pt", font_family: "sans-serif", section_order: ["summary", "experiences", "education", "skills", "projects"] });
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [editorMode, setEditorMode] = useState<"visual" | "latex">("visual");
@@ -83,7 +83,23 @@ export default function DashboardPage() {
   // Resume Preview State
   const [isPreviewingResume, setIsPreviewingResume] = useState(false);
   const [extractedResumeData, setExtractedResumeData] = useState<any>(null);
+  const [tailoredResumeData, setTailoredResumeData] = useState<any>(null);
+  const [activeReviewMode, setActiveReviewMode] = useState<'ai' | 'original'>('ai');
   const [resumeMergeStrategy, setResumeMergeStrategy] = useState<"append" | "overwrite">("append");
+
+  // Section Ordering Drag and Drop State
+  const dragItem = useRef<number | null>(null);
+  const dragOverItem = useRef<number | null>(null);
+
+  const handleSort = () => {
+    if (dragItem.current === null || dragOverItem.current === null || dragItem.current === dragOverItem.current) return;
+    const newOrder = [...(stagedTemplateConfig.section_order || [])];
+    const draggedItemContent = newOrder.splice(dragItem.current, 1)[0];
+    newOrder.splice(dragOverItem.current, 0, draggedItemContent);
+    setStagedTemplateConfig({ ...stagedTemplateConfig, section_order: newOrder });
+    dragItem.current = null;
+    dragOverItem.current = null;
+  };
 
   const buildSnapshot = (profile: any, exps: any[], projs: any[], edus: any[], skills: any[], socials: any[], tconfig: any) =>
     JSON.stringify({ profile, exps, projs, edus, skills, socials, tconfig });
@@ -558,80 +574,79 @@ export default function DashboardPage() {
     }
   };
 
+  const applyGeneratedData = (data: any) => {
+    setStagedProfile({
+      first_name: profile.first_name || '',
+      last_name: profile.last_name || '',
+      location: profile.location || '',
+      email: user?.email || '',
+      phone: profile.phone || '',
+      summary: data.summary || profile.summary || '',
+    });
+
+    setStagedSocials([...socials]);
+
+    if (data.technical_skills && data.technical_skills.length > 0) {
+      setStagedSkills(data.technical_skills);
+    } else {
+      const grouped = skills.reduce((acc: any, skill: any) => {
+        const cat = skill.category || "Other";
+        if (!acc[cat]) acc[cat] = [];
+        acc[cat].push(skill.skill_name);
+        return acc;
+      }, {});
+      setStagedSkills(Object.keys(grouped).map(cat => ({ category: cat, skills: grouped[cat] })));
+    }
+
+    setStagedEducations(educations.length > 0 ? educations.map((edu: any) => ({
+      ...edu,
+      dates: edu.dates || `${edu.start_date || ''} -- ${edu.end_date || 'Present'}`
+    })) : [
+      { institution: "University Name", degree: "Bachelor of Science", dates: "Aug. 2018 -- May 2022" }
+    ]);
+
+    const aiExpMap: Record<string, string[]> = {};
+    (data.experiences || []).forEach((ae: any) => {
+      if (ae.company) aiExpMap[ae.company.toLowerCase()] = ae.bullets || [];
+    });
+    const clonedExps = experiences.map((exp) => {
+      const key = (exp.company_name || '').toLowerCase();
+      const aiBullets = aiExpMap[key];
+      return {
+        ...exp,
+        stagedBullets: aiBullets && aiBullets.length > 0
+          ? aiBullets
+          : (exp.raw_description ? exp.raw_description.split('\n').filter((s: string) => s.trim()) : [])
+      };
+    });
+    setStagedExps(clonedExps);
+
+    const aiProjMap: Record<string, string[]> = {};
+    (data.projects || []).forEach((ap: any) => {
+      if (ap.title) aiProjMap[ap.title.toLowerCase()] = ap.bullets || [];
+    });
+    const clonedProjs = projects.map(proj => {
+      const key = (proj.title || '').toLowerCase();
+      const aiBullets = aiProjMap[key];
+      return {
+        ...proj,
+        tech_stack: proj.tech_stack ? proj.tech_stack.join(', ') : '',
+        stagedBullets: aiBullets && aiBullets.length > 0
+          ? aiBullets
+          : (proj.raw_description ? proj.raw_description.split('\n').filter((s: string) => s.trim()) : [])
+      };
+    });
+    setStagedProjs(clonedProjs);
+
+    setIsReviewing(true);
+    setGenStatus("idle");
+    setActiveReviewMode('ai');
+  };
+
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     const inputVal = url.trim();
     if (!inputVal || !token) return;
-
-
-
-    const applyGeneratedData = (data: any) => {
-      setStagedProfile({
-        first_name: profile.first_name || '',
-        last_name: profile.last_name || '',
-        location: profile.location || '',
-        email: user?.email || '',
-        phone: profile.phone || '',
-        summary: data.summary || profile.summary || '',
-      });
-
-      setStagedSocials([...socials]);
-
-      if (data.technical_skills && data.technical_skills.length > 0) {
-        setStagedSkills(data.technical_skills);
-      } else {
-        const grouped = skills.reduce((acc: any, skill: any) => {
-          const cat = skill.category || "Other";
-          if (!acc[cat]) acc[cat] = [];
-          acc[cat].push(skill.skill_name);
-          return acc;
-        }, {});
-        setStagedSkills(Object.keys(grouped).map(cat => ({ category: cat, skills: grouped[cat] })));
-      }
-
-      setStagedEducations(educations.length > 0 ? educations.map((edu: any) => ({
-        ...edu,
-        dates: edu.dates || `${edu.start_date || ''} -- ${edu.end_date || 'Present'}`
-      })) : [
-        { institution: "University Name", degree: "Bachelor of Science", dates: "Aug. 2018 -- May 2022" }
-      ]);
-
-      const aiExpMap: Record<string, string[]> = {};
-      (data.experiences || []).forEach((ae: any) => {
-        if (ae.company) aiExpMap[ae.company.toLowerCase()] = ae.bullets || [];
-      });
-      const clonedExps = experiences.map((exp) => {
-        const key = (exp.company_name || '').toLowerCase();
-        const aiBullets = aiExpMap[key];
-        return {
-          ...exp,
-          stagedBullets: aiBullets && aiBullets.length > 0
-            ? aiBullets
-            : (exp.raw_description ? exp.raw_description.split('\n').filter((s: string) => s.trim()) : [])
-        };
-      });
-      setStagedExps(clonedExps);
-
-      const aiProjMap: Record<string, string[]> = {};
-      (data.projects || []).forEach((ap: any) => {
-        if (ap.title) aiProjMap[ap.title.toLowerCase()] = ap.bullets || [];
-      });
-      const clonedProjs = projects.map(proj => {
-        const key = (proj.title || '').toLowerCase();
-        const aiBullets = aiProjMap[key];
-        return {
-          ...proj,
-          tech_stack: proj.tech_stack ? proj.tech_stack.join(', ') : '',
-          stagedBullets: aiBullets && aiBullets.length > 0
-            ? aiBullets
-            : (proj.raw_description ? proj.raw_description.split('\n').filter((s: string) => s.trim()) : [])
-        };
-      });
-      setStagedProjs(clonedProjs);
-
-      setIsReviewing(true);
-      setGenStatus("idle");
-    };
 
     setGenStatus("loading");
     setGenError(null);
@@ -655,6 +670,7 @@ export default function DashboardPage() {
       }
 
       const data = await res.json();
+      setTailoredResumeData(data);
       applyGeneratedData(data);
     } catch (err: any) {
       setGenError(err.message || "Failed to analyze target job.");
@@ -702,6 +718,7 @@ export default function DashboardPage() {
     setStagedSocials(socials);
     setIsReviewing(true);
     setGenStatus("success");
+    setActiveReviewMode('original');
     setPdfPreviewUrl(null);
   };
 
@@ -1264,26 +1281,85 @@ export default function DashboardPage() {
                 <button onClick={() => toggleEditorMode('latex')} className={`btn ${editorMode === 'latex' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }}>Advanced Mode (LaTeX)</button>
               </div>
 
+              {/* Data Content Toggle */}
+              {tailoredResumeData && (
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', padding: '10px', background: 'var(--glass-bg)', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
+                  <button onClick={handlePreviewVault} className={`btn ${activeReviewMode === 'original' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
+                    User Original Data
+                  </button>
+                  <button onClick={() => applyGeneratedData(tailoredResumeData)} className={`btn ${activeReviewMode === 'ai' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
+                    AI Tailored Data
+                  </button>
+                </div>
+              )}
+
+              {/* Data Content Toggle */}
+              {tailoredResumeData && (
+                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', padding: '10px', background: 'var(--glass-bg)', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
+                  <button onClick={handlePreviewVault} className={`btn ${activeReviewMode === 'original' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
+                    User Original Data
+                  </button>
+                  <button onClick={() => applyGeneratedData(tailoredResumeData)} className={`btn ${activeReviewMode === 'ai' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
+                    AI Tailored Data
+                  </button>
+                </div>
+              )}
+
               {editorMode === 'visual' ? (
                 <>
                   {/* Template Settings Block */}
                   <div style={{ marginBottom: '20px' }}>
                     <span style={sectionLabel}>Template Settings</span>
-                    <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '10px', padding: '14px', display: 'flex', gap: '15px' }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={labelStyle}>Font Style</label>
-                        <select className="form-input" style={inputStyle} value={stagedTemplateConfig.font_family} onChange={e => setStagedTemplateConfig({ ...stagedTemplateConfig, font_family: e.target.value })}>
-                          <option value="sans-serif">Modern (Sans-Serif)</option>
-                          <option value="serif">Classic (Serif)</option>
-                        </select>
+                    <div style={{ background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '10px', padding: '14px', display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                      <div style={{ display: 'flex', gap: '15px' }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={labelStyle}>Font Style</label>
+                          <select className="form-input" style={inputStyle} value={stagedTemplateConfig.font_family} onChange={e => setStagedTemplateConfig({ ...stagedTemplateConfig, font_family: e.target.value })}>
+                            <option value="sans-serif">Modern (Sans-Serif)</option>
+                            <option value="serif">Classic (Serif)</option>
+                          </select>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <label style={labelStyle}>Font Size</label>
+                          <select className="form-input" style={inputStyle} value={stagedTemplateConfig.font_size} onChange={e => setStagedTemplateConfig({ ...stagedTemplateConfig, font_size: e.target.value })}>
+                            <option value="10pt">Small (10pt)</option>
+                            <option value="11pt">Medium (11pt)</option>
+                            <option value="12pt">Large (12pt)</option>
+                          </select>
+                        </div>
                       </div>
-                      <div style={{ flex: 1 }}>
-                        <label style={labelStyle}>Font Size</label>
-                        <select className="form-input" style={inputStyle} value={stagedTemplateConfig.font_size} onChange={e => setStagedTemplateConfig({ ...stagedTemplateConfig, font_size: e.target.value })}>
-                          <option value="10pt">Small (10pt)</option>
-                          <option value="11pt">Medium (11pt)</option>
-                          <option value="12pt">Large (12pt)</option>
-                        </select>
+                      
+                      {/* Section Ordering UI */}
+                      <div>
+                        <label style={{ ...labelStyle, marginBottom: '8px', display: 'block' }}>Section Order (Drag or Click Arrows)</label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                          {stagedTemplateConfig.section_order?.map((secName, idx) => (
+                            <div 
+                              key={secName} 
+                              draggable
+                              onDragStart={() => (dragItem.current = idx)}
+                              onDragEnter={() => (dragOverItem.current = idx)}
+                              onDragEnd={handleSort}
+                              onDragOver={(e) => e.preventDefault()}
+                              style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', cursor: 'grab' }}
+                            >
+                              <span style={{ color: 'var(--text-muted)', marginRight: '10px', fontSize: '1.2rem' }}>⣿</span>
+                              <span style={{ flex: 1, textTransform: 'capitalize', fontSize: '0.95rem' }}>{secName}</span>
+                              <div style={{ display: 'flex', gap: '4px' }}>
+                                <button className="btn btn-secondary" style={{ padding: '2px 8px' }} disabled={idx === 0} onClick={() => {
+                                  const newArr = [...stagedTemplateConfig.section_order];
+                                  [newArr[idx - 1], newArr[idx]] = [newArr[idx], newArr[idx - 1]];
+                                  setStagedTemplateConfig({ ...stagedTemplateConfig, section_order: newArr });
+                                }}>↑</button>
+                                <button className="btn btn-secondary" style={{ padding: '2px 8px' }} disabled={idx === stagedTemplateConfig.section_order.length - 1} onClick={() => {
+                                  const newArr = [...stagedTemplateConfig.section_order];
+                                  [newArr[idx + 1], newArr[idx]] = [newArr[idx], newArr[idx + 1]];
+                                  setStagedTemplateConfig({ ...stagedTemplateConfig, section_order: newArr });
+                                }}>↓</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     </div>
                   </div>
