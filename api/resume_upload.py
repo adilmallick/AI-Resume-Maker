@@ -97,84 +97,90 @@ async def save_extracted(
     if strategy not in ["append", "overwrite"]:
         raise HTTPException(status_code=400, detail="Strategy must be 'append' or 'overwrite'")
 
-    # Save Profile
-    if data.profile:
-        result = await db.execute(select(UserProfile).where(UserProfile.user_id == user.id))
-        profile = result.scalars().first()
-        if not profile:
-            profile = UserProfile(user_id=user.id, first_name=data.profile.first_name, last_name=data.profile.last_name)
-            db.add(profile)
-        
-        if strategy == "overwrite" or not profile.first_name:
-            profile.first_name = data.profile.first_name
-        if strategy == "overwrite" or not profile.last_name:
-            profile.last_name = data.profile.last_name
-        if strategy == "overwrite" or not profile.phone:
-            profile.phone = data.profile.phone
-        if strategy == "overwrite" or not profile.location:
-            profile.location = data.profile.location
-        if strategy == "overwrite" or not profile.summary:
-            profile.summary = data.profile.summary
+    try:
+        # Save Profile
+        if data.profile:
+            result = await db.execute(select(UserProfile).where(UserProfile.user_id == user.id))
+            profile = result.scalars().first()
+            if not profile:
+                profile = UserProfile(user_id=user.id, first_name=data.profile.first_name, last_name=data.profile.last_name)
+                db.add(profile)
+            
+            if strategy == "overwrite" or not profile.first_name:
+                # Truncate first_name and last_name to 100 chars
+                profile.first_name = (data.profile.first_name or "")[:100]
+            if strategy == "overwrite" or not profile.last_name:
+                profile.last_name = (data.profile.last_name or "")[:100]
+            if strategy == "overwrite" or not profile.phone:
+                profile.phone = (data.profile.phone or "")[:20] if data.profile.phone else None
+            if strategy == "overwrite" or not profile.location:
+                profile.location = (data.profile.location or "")[:100] if data.profile.location else None
+            if strategy == "overwrite" or not profile.summary:
+                profile.summary = data.profile.summary
 
-    # Experiences
-    if strategy == "overwrite":
-        await db.execute(delete(UserExperience).where(UserExperience.user_id == user.id))
-    for exp in data.experiences:
-        start_dt = parse_date(exp.start_date) or date.today()
-        end_dt = parse_date(exp.end_date)
-        new_record = UserExperience(
-            user_id=user.id,
-            company_name=exp.company_name,
-            job_title=exp.job_title,
-            location=exp.location,
-            start_date=start_dt,
-            end_date=end_dt,
-            is_current=exp.is_current,
-            raw_description=exp.raw_description
-        )
-        db.add(new_record)
+        # Experiences
+        if strategy == "overwrite":
+            await db.execute(delete(UserExperience).where(UserExperience.user_id == user.id))
+        for exp in data.experiences:
+            start_dt = parse_date(exp.start_date) or date.today()
+            end_dt = parse_date(exp.end_date)
+            new_record = UserExperience(
+                user_id=user.id,
+                company_name=(exp.company_name or "")[:255],
+                job_title=(exp.job_title or "")[:255],
+                location=(exp.location or "")[:100] if exp.location else None,
+                start_date=start_dt,
+                end_date=end_dt,
+                is_current=exp.is_current,
+                raw_description=exp.raw_description
+            )
+            db.add(new_record)
 
-    # Educations
-    if strategy == "overwrite":
-        await db.execute(delete(UserEducation).where(UserEducation.user_id == user.id))
-    for edu in data.educations:
-        start_dt = parse_date(edu.start_date) or date.today()
-        end_dt = parse_date(edu.end_date)
-        new_record = UserEducation(
-            user_id=user.id,
-            institution=edu.institution,
-            degree=edu.degree,
-            field_of_study=edu.field_of_study,
-            start_date=start_dt,
-            end_date=end_dt
-        )
-        db.add(new_record)
+        # Educations
+        if strategy == "overwrite":
+            await db.execute(delete(UserEducation).where(UserEducation.user_id == user.id))
+        for edu in data.educations:
+            start_dt = parse_date(edu.start_date) or date.today()
+            end_dt = parse_date(edu.end_date)
+            new_record = UserEducation(
+                user_id=user.id,
+                institution=(edu.institution or "")[:255],
+                degree=(edu.degree or "")[:100],
+                field_of_study=(edu.field_of_study or "")[:100],
+                start_date=start_dt,
+                end_date=end_dt
+            )
+            db.add(new_record)
 
-    # Skills
-    if strategy == "overwrite":
-        await db.execute(delete(UserSkill).where(UserSkill.user_id == user.id))
-    for skill in data.skills:
-        new_record = UserSkill(
-            user_id=user.id,
-            skill_name=skill.skill_name,
-            category=skill.category
-        )
-        db.add(new_record)
+        # Skills
+        if strategy == "overwrite":
+            await db.execute(delete(UserSkill).where(UserSkill.user_id == user.id))
+        for skill in data.skills:
+            new_record = UserSkill(
+                user_id=user.id,
+                skill_name=(skill.skill_name or "")[:100],
+                category=(skill.category or "")[:50] if skill.category else None
+            )
+            db.add(new_record)
 
-    # Projects
-    if strategy == "overwrite":
-        await db.execute(delete(UserProject).where(UserProject.user_id == user.id))
-    for proj in data.projects:
-        new_record = UserProject(
-            user_id=user.id,
-            title=proj.title,
-            role=proj.role,
-            repository_url=proj.repository_url,
-            live_demo_url=proj.live_demo_url,
-            tech_stack=proj.tech_stack,
-            raw_description=proj.raw_description
-        )
-        db.add(new_record)
+        # Projects
+        if strategy == "overwrite":
+            await db.execute(delete(UserProject).where(UserProject.user_id == user.id))
+        for proj in data.projects:
+            new_record = UserProject(
+                user_id=user.id,
+                title=(proj.title or "")[:255],
+                role=(proj.role or "")[:150] if proj.role else None,
+                repository_url=(proj.repository_url or "")[:1024] if proj.repository_url else None,
+                live_demo_url=(proj.live_demo_url or "")[:1024] if proj.live_demo_url else None,
+                tech_stack=proj.tech_stack,
+                raw_description=proj.raw_description
+            )
+            db.add(new_record)
 
-    await db.commit()
-    return {"message": "Data saved successfully"}
+        await db.commit()
+        return {"message": "Data saved successfully"}
+    except Exception as e:
+        await db.rollback()
+        logger.error(f"Error saving extracted data: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

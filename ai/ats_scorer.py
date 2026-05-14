@@ -38,10 +38,10 @@ class ATSScorer:
         
         # 1. Build Candidate Corpus
         # Combine skills, experience bullets, project descriptions, summary
-        profile = staged_data.get("profile", {})
+        profile = staged_data.get("profile") or {}
         summary = profile.get("summary", "")
         
-        skills_data = staged_data.get("skills", [])
+        skills_data = staged_data.get("skills") or []
         flat_skills = []
         for cat in skills_data:
             if isinstance(cat, dict) and "skills" in cat:
@@ -49,21 +49,21 @@ class ATSScorer:
             elif isinstance(cat, str):
                 flat_skills.append(cat)
         
-        experiences = staged_data.get("experiences", [])
+        experiences = staged_data.get("experiences") or []
         exp_text = []
         job_titles = []
         for exp in experiences:
             job_titles.append(exp.get("job_title", "").lower())
-            bullets = exp.get("stagedBullets", []) or exp.get("bullets", [])
+            bullets = exp.get("stagedBullets") or exp.get("bullets") or []
             if isinstance(bullets, list):
                 exp_text.extend(bullets)
             elif isinstance(bullets, str):
                 exp_text.append(bullets)
         
-        projects = staged_data.get("projects", [])
+        projects = staged_data.get("projects") or []
         proj_text = []
         for proj in projects:
-            bullets = proj.get("stagedBullets", []) or proj.get("bullets", [])
+            bullets = proj.get("stagedBullets") or proj.get("bullets") or []
             if isinstance(bullets, list):
                 proj_text.extend(bullets)
             elif isinstance(bullets, str):

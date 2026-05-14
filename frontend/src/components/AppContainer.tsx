@@ -40,17 +40,17 @@ export default function AppContainer({ children }: { children: React.ReactNode }
             Resume<span className="text-gradient">Vault</span>
           </Link>
         </div>
-        
+
         <nav className="sidebar-nav">
-          <Link href="/dashboard" className={`sidebar-item ${pathname === '/dashboard' ? 'active' : ''}`}>
+          {/* <Link href="/dashboard" className={`sidebar-item ${pathname === '/dashboard' ? 'active' : ''}`}>
             <span>📊</span> Dashboard
-          </Link>
+          </Link> */}
           <Link href="/vault" className={`sidebar-item ${pathname?.startsWith('/vault') ? 'active' : ''}`}>
             <span>🗄️</span> Career Vault
           </Link>
-          <Link href="/studio" className={`sidebar-item ${pathname?.startsWith('/studio') ? 'active' : ''}`}>
+          {/* <Link href="/studio" className={`sidebar-item ${pathname?.startsWith('/studio') ? 'active' : ''}`}>
             <span>✨</span> Resume Studio
-          </Link>
+          </Link> */}
         </nav>
 
         <div className="sidebar-footer">
