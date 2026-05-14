@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import RichTextEditor from '@/components/RichTextEditor';
 import ExtractedDataViewer from '@/components/ExtractedDataViewer';
 import LaTeXEditor from '@/components/LaTeXEditor';
+import { ATSResult } from '@/types/ats';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -65,7 +66,7 @@ export default function DashboardPage() {
   // We'll manage stagedSkills as a grouped format: [{category: "Languages", skills: ["JS", "TS"]}, ...]
   const [stagedSkills, setStagedSkills] = useState<{ category: string, skills: string[] }[]>([]);
   const [stagedSocials, setStagedSocials] = useState<any[]>([]);
-  const [stagedTemplateConfig, setStagedTemplateConfig] = useState<{font_size: string, font_family: string, section_order: string[]}>({ font_size: "11pt", font_family: "sans-serif", section_order: ["summary", "experiences", "education", "skills", "projects"] });
+  const [stagedTemplateConfig, setStagedTemplateConfig] = useState<{ font_size: string, font_family: string, section_order: string[] }>({ font_size: "11pt", font_family: "sans-serif", section_order: ["summary", "experiences", "education", "skills", "projects"] });
   const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
   const [editorMode, setEditorMode] = useState<"visual" | "latex">("visual");
@@ -74,6 +75,16 @@ export default function DashboardPage() {
   const stagingInitialized = useRef(false);
   // Stores JSON of staged data at the time of last compile (or initial load)
   const compiledSnapshot = useRef<string>('');
+
+  // ATS
+  const [atsStatus, setAtsStatus] = useState<'idle' | 'loading' | 'error'>('idle');
+  const [atsResult, setAtsResult] = useState<ATSResult | null>(null);
+  const [isAtsDirty, setIsAtsDirty] = useState(false);
+  const [openTitleIdx, setOpenTitleIdx] = useState<number | null>(null);
+  const [isAtsPanelOpen, setIsAtsPanelOpen] = useState(true);
+  const [isJobDetailsOpen, setIsJobDetailsOpen] = useState(false);
+  const atsSnapshot = useRef<string>('');
+  const atsInitialized = useRef(false);
 
   // Resume Upload State
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -641,7 +652,72 @@ export default function DashboardPage() {
     setIsReviewing(true);
     setGenStatus("idle");
     setActiveReviewMode('ai');
+    setPdfPreviewUrl(null);
   };
+
+  // Build a snapshot of data that affects ATS score (skills, exp bullets, proj bullets, summary)
+  const buildAtsSnapshot = () => JSON.stringify({
+    summary: stagedProfile?.summary,
+    skills: stagedSkills,
+    expBullets: stagedExps.map(e => e.stagedBullets),
+    projBullets: stagedProjs.map(p => p.stagedBullets),
+  });
+
+  // Watch ATS-relevant fields and mark dirty after first score load
+  useEffect(() => {
+    const current = buildAtsSnapshot();
+    if (!atsInitialized.current) return;
+    setIsAtsDirty(current !== atsSnapshot.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stagedProfile?.summary, stagedSkills, stagedExps, stagedProjs]);
+
+  const handleCheckATS = async () => {
+    if (!token) return;
+    setAtsStatus('loading');
+    setIsAtsPanelOpen(true);
+    try {
+      const payload = {
+        job_input: url,
+        resume_data: {
+          profile: stagedProfile,
+          experiences: stagedExps,
+          projects: stagedProjs,
+          educations: stagedEducations,
+          skills: stagedSkills
+        }
+      };
+
+      const res = await fetch(`${API_URL}/api/ats/score`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(payload)
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || 'Failed to calculate ATS score');
+      }
+
+      const data = await res.json();
+      setAtsResult(data);
+      setAtsStatus('idle');
+      
+      // Save snapshot and mark clean after a successful score
+      atsSnapshot.current = buildAtsSnapshot();
+      atsInitialized.current = true;
+      setIsAtsDirty(false);
+    } catch (err) {
+      console.error(err);
+      setAtsStatus('error');
+    }
+  };
+
+  useEffect(() => {
+    if (isReviewing && url) {
+      handleCheckATS();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReviewing]);
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -856,11 +932,11 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    if (isReviewing && !pdfPreviewUrl) {
+    if (isReviewing && !pdfPreviewUrl && stagedProfile) {
       handleGeneratePreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReviewing]);
+  }, [isReviewing, pdfPreviewUrl]);
 
   const handleDownloadPdf = () => {
     if (!pdfPreviewUrl) return;
@@ -1248,6 +1324,19 @@ export default function DashboardPage() {
             </div>
             <div style={{ display: 'flex', gap: '10px' }}>
               <button className="btn btn-secondary" onClick={() => setIsReviewing(false)} style={{ padding: '6px 15px', fontSize: '0.9rem' }}>Cancel</button>
+              
+              <button
+                className="btn btn-secondary"
+                onClick={handleCheckATS}
+                disabled={atsStatus === 'loading'}
+                style={{ position: 'relative', padding: '6px 15px', fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                {isAtsDirty && atsStatus !== 'loading' && (
+                  <span style={{ position: 'absolute', top: '-5px', right: '-5px', width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 6px rgba(239,68,68,0.8)', display: 'block' }} />
+                )}
+                {atsStatus === 'loading' ? 'Scoring...' : '🎯 Check ATS Score'}
+              </button>
+
               <button
                 className="btn btn-secondary"
                 onClick={handleGeneratePreview}
@@ -1275,35 +1364,283 @@ export default function DashboardPage() {
             {/* ─── Left: Editor Panel (55%) ─── */}
             <div style={{ width: '55%', overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column' }} className="custom-scrollbar">
 
-              {/* Mode Toggle */}
-              <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-                <button onClick={() => toggleEditorMode('visual')} className={`btn ${editorMode === 'visual' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }}>Visual Editor</button>
-                <button onClick={() => toggleEditorMode('latex')} className={`btn ${editorMode === 'latex' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1 }}>Advanced Mode (LaTeX)</button>
+              {/* Job Details Accordion */}
+              {url && (
+                <div style={{ marginBottom: '20px', background: 'var(--glass-bg)', border: '1px solid var(--glass-border)', borderRadius: '10px', position: 'relative' }}>
+                  <div 
+                    role="button"
+                    tabIndex={0}
+                    style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'transparent', cursor: 'pointer', textAlign: 'left', userSelect: 'none', transition: 'background 0.2s ease', borderRadius: isJobDetailsOpen ? '9px 9px 0 0' : '9px' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(108, 93, 211, 0.1)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onClick={(e) => { e.stopPropagation(); setIsJobDetailsOpen(!isJobDetailsOpen); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsJobDetailsOpen(!isJobDetailsOpen); } }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)' }}>
+                      Target Job Details
+                    </h3>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{isJobDetailsOpen ? '▲ Hide' : '▼ Show'}</span>
+                  </div>
+
+                  {isJobDetailsOpen && (
+                    <div style={{ padding: '0 16px 16px', fontSize: '0.85rem', color: 'var(--text-muted)', maxHeight: '400px', overflowY: 'auto' }} className="custom-scrollbar">
+                      {url.startsWith('http') && (
+                        <div style={{ marginBottom: '12px' }}>
+                          <strong>Job URL:</strong> <a href={url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{url}</a>
+                        </div>
+                      )}
+                      
+                      {tailoredResumeData?.job_data ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                            {tailoredResumeData.job_data.title && <span style={{ background: 'rgba(108,93,211,0.15)', color: 'var(--accent)', padding: '4px 10px', borderRadius: '12px', fontWeight: 600 }}>{tailoredResumeData.job_data.title}</span>}
+                            {tailoredResumeData.job_data.company && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px' }}>🏢 {tailoredResumeData.job_data.company}</span>}
+                            {tailoredResumeData.job_data.location && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px' }}>📍 {tailoredResumeData.job_data.location}</span>}
+                            {tailoredResumeData.job_data.job_type && <span style={{ background: 'rgba(255,255,255,0.05)', padding: '4px 10px', borderRadius: '12px' }}>💼 {tailoredResumeData.job_data.job_type}</span>}
+                            {tailoredResumeData.job_data.salary && <span style={{ background: 'rgba(56,226,152,0.1)', color: 'var(--success)', padding: '4px 10px', borderRadius: '12px' }}>💰 {tailoredResumeData.job_data.salary}</span>}
+                          </div>
+                          
+                          {tailoredResumeData.job_data.description && (
+                            <div>
+                              <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Overview</strong>
+                              <div style={{ padding: '10px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)', whiteSpace: 'pre-wrap' }}>
+                                {tailoredResumeData.job_data.description}
+                              </div>
+                            </div>
+                          )}
+
+                          {tailoredResumeData.job_data.requirements?.length > 0 && (
+                            <div>
+                              <strong style={{ color: 'var(--text-main)', display: 'block', marginBottom: '4px' }}>Requirements</strong>
+                              <ul style={{ margin: 0, paddingLeft: '20px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)', padding: '10px 10px 10px 30px' }}>
+                                {tailoredResumeData.job_data.requirements.map((req: string, i: number) => (
+                                  <li key={i} style={{ marginBottom: '4px' }}>{req}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div>
+                          <strong style={{ color: 'var(--text-main)' }}>Extracted Job Description:</strong><br />
+                          <div style={{ marginTop: '8px', padding: '12px', background: 'rgba(0,0,0,0.2)', borderRadius: '6px', border: '1px solid rgba(255,255,255,0.05)', whiteSpace: 'pre-wrap' }}>
+                            {tailoredResumeData?.job_description || (url.startsWith('http') ? 'Loading job description...' : url)}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ATS Score Panel */}
+              {(atsStatus === 'loading' || atsResult || atsStatus === 'error') && (
+                <div style={{ marginBottom: '20px', background: 'rgba(108, 93, 211, 0.08)', border: '1px solid var(--accent)', borderRadius: '10px', position: 'relative' }}>
+                  <div 
+                    role="button"
+                    tabIndex={0}
+                    style={{ width: '100%', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px', background: 'transparent', cursor: 'pointer', textAlign: 'left', userSelect: 'none', transition: 'background 0.2s ease', borderRadius: isAtsPanelOpen ? '9px 9px 0 0' : '9px' }}
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(108, 93, 211, 0.15)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    onClick={(e) => { e.stopPropagation(); setIsAtsPanelOpen(!isAtsPanelOpen); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsAtsPanelOpen(!isAtsPanelOpen); } }}
+                  >
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--accent-light)' }}>
+                      ATS Match Score {atsResult ? `(${atsResult.overall_score}%)` : ''}
+                    </h3>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{isAtsPanelOpen ? '▲ Hide' : '▼ Show'}</span>
+                  </div>
+
+                  {isAtsPanelOpen && (
+                    <div style={{ padding: '0 16px 16px' }}>
+                      {atsStatus === 'loading' ? (
+                        <div style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>Analyzing resume against job description...</div>
+                      ) : atsStatus === 'error' ? (
+                        <div style={{ color: 'var(--error)', fontSize: '0.9rem' }}>Failed to calculate score. Check connection or job description.</div>
+                      ) : atsResult && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div style={{ display: 'flex', gap: '20px', alignItems: 'center' }}>
+                        {/* Score Circle */}
+                        <div style={{ position: 'relative', width: '80px', height: '80px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <svg width="80" height="80" viewBox="0 0 100 100">
+                            <circle cx="50" cy="50" r="45" fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth="8" />
+                            <circle cx="50" cy="50" r="45" fill="none" stroke={atsResult.overall_score >= 80 ? 'var(--success)' : atsResult.overall_score >= 60 ? '#eab308' : 'var(--error)'} strokeWidth="8" strokeDasharray={`${2 * Math.PI * 45}`} strokeDashoffset={`${2 * Math.PI * 45 * (1 - atsResult.overall_score / 100)}`} strokeLinecap="round" transform="rotate(-90 50 50)" style={{ transition: 'stroke-dashoffset 1s ease-out' }} />
+                          </svg>
+                          <div style={{ position: 'absolute', fontSize: '1.4rem', fontWeight: 700 }}>{atsResult.overall_score}%</div>
+                        </div>
+
+                        {/* Dimension Bars */}
+                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          {[
+                            { label: 'Keywords', score: atsResult.keyword_score, help: 'Percentage of job keywords found in your bullets and descriptions.' },
+                            { label: 'Skills', score: atsResult.skill_score, help: 'Percentage of required skills found in your explicit Skills section.' },
+                            { label: 'Title Match', score: atsResult.title_score, help: 'How well your past job titles match the target role.' },
+                            { label: 'Completeness', score: atsResult.completeness_score, help: 'Presence of standard resume sections (Summary, Experience, Projects, etc.).' }
+                          ].map((dim, i) => (
+                            <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                              <span style={{ width: '110px', fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }} title={dim.help}>
+                                {dim.label}
+                                <span style={{ cursor: 'help', fontSize: '0.65rem', opacity: 0.6 }}>ⓘ</span>
+                              </span>
+                              <div style={{ flex: 1, height: '6px', background: 'var(--glass-border)', borderRadius: '3px', overflow: 'hidden' }}>
+                                <div style={{ width: `${dim.score}%`, height: '100%', background: 'var(--accent)', borderRadius: '3px' }} />
+                              </div>
+                              <span style={{ width: '30px', fontSize: '0.75rem', textAlign: 'right' }}>{dim.score}%</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Keywords */}
+                      <div style={{ fontSize: '0.8rem' }}>
+                        <div style={{ marginBottom: '6px', fontWeight: 600 }}>Matched Keywords & Skills:</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {atsResult.matched_keywords.length > 0 ? atsResult.matched_keywords.map((k, i) => (
+                            <span key={i} style={{ background: 'rgba(56, 226, 152, 0.15)', color: 'var(--success)', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>✓ {k}</span>
+                          )) : <span style={{ color: 'var(--text-muted)' }}>None found</span>}
+                        </div>
+                      </div>
+
+                      <div style={{ fontSize: '0.8rem' }}>
+                        <div style={{ marginBottom: '6px', fontWeight: 600 }}>Missing Keywords & Skills:</div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                          {atsResult.missing_keywords.length > 0 ? atsResult.missing_keywords.map((k, i) => (
+                            <span key={i} style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', padding: '2px 8px', borderRadius: '12px', fontSize: '0.75rem' }}>✕ {k}</span>
+                          )) : <span style={{ color: 'var(--success)' }}>All keywords matched!</span>}
+                        </div>
+                      </div>
+
+                      {/* Suggested Titles — Interactive */}
+                      {atsResult.title_score < 100 && (
+                        <div style={{ fontSize: '0.8rem', background: 'rgba(234,179,8,0.06)', border: '1px solid rgba(234,179,8,0.2)', borderRadius: '8px', padding: '10px 14px' }}>
+                          <div style={{ fontWeight: 600, color: '#eab308', marginBottom: '4px' }}>💼 Suggested Job Titles</div>
+                          <div style={{ color: 'var(--text-muted)', marginBottom: '8px', fontSize: '0.75rem' }}>
+                            Click a title to apply it to an experience entry to boost your Title Match score.
+                          </div>
+                          {(atsResult.suggested_titles?.length ?? 0) > 0 ? (
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                              {(atsResult.suggested_titles ?? []).map((title, i) => (
+                                <div key={i} style={{ position: 'relative', display: 'inline-block' }}>
+                                  <button
+                                    onClick={() => setOpenTitleIdx(openTitleIdx === i ? null : i)}
+                                    style={{
+                                      background: 'rgba(234,179,8,0.15)', color: '#eab308',
+                                      padding: '3px 10px', borderRadius: '12px', fontSize: '0.75rem',
+                                      cursor: 'pointer', border: '1px solid rgba(234,179,8,0.4)'
+                                    }}
+                                  >
+                                    {title} ▾
+                                  </button>
+                                  {openTitleIdx === i && (
+                                    <div style={{
+                                      position: 'absolute', top: '100%', left: 0, zIndex: 10,
+                                      background: 'var(--bg-card)', border: '1px solid var(--border-color)',
+                                      borderRadius: '8px', padding: '6px', minWidth: '220px',
+                                      boxShadow: '0 4px 20px rgba(0,0,0,0.4)', marginTop: '4px'
+                                    }}>
+                                      <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', padding: '2px 6px', marginBottom: '4px' }}>Apply to:</div>
+
+                                      <button
+                                        style={{
+                                          display: 'block', width: '100%', textAlign: 'left',
+                                          background: 'none', border: 'none', cursor: 'pointer',
+                                          padding: '5px 8px', fontSize: '0.78rem', color: 'var(--text-main)',
+                                          borderRadius: '4px', marginBottom: '4px'
+                                        }}
+                                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(108,93,211,0.15)')}
+                                        onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                                        onClick={() => {
+                                          const currentSummary = stagedProfile?.summary || '';
+                                          if (!currentSummary.includes(title)) {
+                                            setStagedProfile({ ...stagedProfile, summary: currentSummary ? `${title} | ${currentSummary}` : title });
+                                          }
+                                          setOpenTitleIdx(null); // close after selecting
+                                        }}
+                                      >
+                                        📝 Professional Summary
+                                      </button>
+
+                                      <div style={{ height: '1px', background: 'var(--glass-border)', margin: '4px 0' }} />
+
+                                      {stagedExps.length === 0 && (
+                                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', padding: '4px 6px' }}>No experiences found.</div>
+                                      )}
+                                      {stagedExps.map((exp, expIdx) => (
+                                        <button
+                                          key={expIdx}
+                                          style={{
+                                            display: 'block', width: '100%', textAlign: 'left',
+                                            background: 'none', border: 'none', cursor: 'pointer',
+                                            padding: '5px 8px', fontSize: '0.78rem', color: 'var(--text-main)',
+                                            borderRadius: '4px'
+                                          }}
+                                          onMouseEnter={e => (e.currentTarget.style.background = 'rgba(108,93,211,0.15)')}
+                                          onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+                                          onClick={() => {
+                                            const updated = [...stagedExps];
+                                            updated[expIdx].job_title = title;
+                                            setStagedExps(updated);
+                                            setOpenTitleIdx(null); // close after selecting
+                                          }}
+                                        >
+                                          💼 #{expIdx + 1} · {exp.company_name || 'Unnamed'} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({exp.job_title || 'No title'})</span>
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                              Update your experience job titles to more closely reflect the target role's language.
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Tips */}
+                      {atsResult.tips.length > 0 && (
+                        <div style={{ background: 'rgba(0,0,0,0.2)', padding: '10px 14px', borderRadius: '8px' }}>
+                          <strong style={{ display: 'block', fontSize: '0.8rem', color: '#eab308', marginBottom: '6px' }}>💡 Tips to Improve</strong>
+                          <ul style={{ margin: 0, paddingLeft: '18px', fontSize: '0.8rem', color: 'var(--text-main)' }}>
+                            {atsResult.tips.map((tip, i) => <li key={i} style={{ marginBottom: '4px' }}>{tip}</li>)}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                {/* Mode Toggle */}
+                <div style={{ display: 'flex', background: 'var(--glass-bg)', borderRadius: '20px', border: '1px solid var(--glass-border)', padding: '3px' }}>
+                  <button onClick={() => toggleEditorMode('visual')} style={{ padding: '5px 16px', fontSize: '0.85rem', borderRadius: '16px', background: editorMode === 'visual' ? 'var(--accent)' : 'transparent', color: editorMode === 'visual' ? '#fff' : 'var(--text-muted)', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+                    Visual Editor
+                  </button>
+                  <button onClick={() => toggleEditorMode('latex')} style={{ padding: '5px 16px', fontSize: '0.85rem', borderRadius: '16px', background: editorMode === 'latex' ? 'var(--accent)' : 'transparent', color: editorMode === 'latex' ? '#fff' : 'var(--text-muted)', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+                    Advanced (LaTeX)
+                  </button>
+                </div>
+
+                {/* Data Content Toggle */}
+                {tailoredResumeData && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Data:</span>
+                    <div style={{ display: 'flex', background: 'var(--glass-bg)', borderRadius: '20px', border: '1px solid var(--glass-border)', padding: '3px' }}>
+                      <button onClick={handlePreviewVault} style={{ padding: '4px 14px', fontSize: '0.8rem', borderRadius: '16px', background: activeReviewMode === 'original' ? 'var(--accent)' : 'transparent', color: activeReviewMode === 'original' ? '#fff' : 'var(--text-muted)', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+                        Original
+                      </button>
+                      <button onClick={() => applyGeneratedData(tailoredResumeData)} style={{ padding: '4px 14px', fontSize: '0.8rem', borderRadius: '16px', background: activeReviewMode === 'ai' ? 'var(--success)' : 'transparent', color: activeReviewMode === 'ai' ? '#fff' : 'var(--text-muted)', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
+                        AI Tailored
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
-
-              {/* Data Content Toggle */}
-              {tailoredResumeData && (
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', padding: '10px', background: 'var(--glass-bg)', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
-                  <button onClick={handlePreviewVault} className={`btn ${activeReviewMode === 'original' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
-                    User Original Data
-                  </button>
-                  <button onClick={() => applyGeneratedData(tailoredResumeData)} className={`btn ${activeReviewMode === 'ai' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
-                    AI Tailored Data
-                  </button>
-                </div>
-              )}
-
-              {/* Data Content Toggle */}
-              {tailoredResumeData && (
-                <div style={{ display: 'flex', gap: '10px', marginBottom: '20px', padding: '10px', background: 'var(--glass-bg)', borderRadius: '10px', border: '1px solid var(--glass-border)' }}>
-                  <button onClick={handlePreviewVault} className={`btn ${activeReviewMode === 'original' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
-                    User Original Data
-                  </button>
-                  <button onClick={() => applyGeneratedData(tailoredResumeData)} className={`btn ${activeReviewMode === 'ai' ? 'btn-primary' : 'btn-secondary'}`} style={{ flex: 1, padding: '8px' }}>
-                    AI Tailored Data
-                  </button>
-                </div>
-              )}
 
               {editorMode === 'visual' ? (
                 <>
@@ -1328,11 +1665,11 @@ export default function DashboardPage() {
                           </select>
                         </div>
                       </div>
-                      
+
                       {/* Section Ordering UI */}
                       <div>
-                        <label style={{ ...labelStyle, marginBottom: '8px', display: 'block' }}>Section Order (Drag or Click Arrows)</label>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                        <label style={{ ...labelStyle, marginBottom: '8px', display: 'block' }}>Section Order (Drag to Reorder)</label>
+                        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                           {stagedTemplateConfig.section_order?.map((secName, idx) => (
                             <div 
                               key={secName} 
@@ -1341,21 +1678,21 @@ export default function DashboardPage() {
                               onDragEnter={() => (dragOverItem.current = idx)}
                               onDragEnd={handleSort}
                               onDragOver={(e) => e.preventDefault()}
-                              style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', padding: '8px 12px', borderRadius: '6px', border: '1px solid var(--border-color)', cursor: 'grab' }}
+                              style={{ display: 'flex', alignItems: 'center', background: 'var(--bg-main)', padding: '4px 10px', borderRadius: '16px', border: '1px solid var(--border-color)', cursor: 'grab', transition: 'transform 0.1s ease', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}
                             >
-                              <span style={{ color: 'var(--text-muted)', marginRight: '10px', fontSize: '1.2rem' }}>⣿</span>
-                              <span style={{ flex: 1, textTransform: 'capitalize', fontSize: '0.95rem' }}>{secName}</span>
-                              <div style={{ display: 'flex', gap: '4px' }}>
-                                <button className="btn btn-secondary" style={{ padding: '2px 8px' }} disabled={idx === 0} onClick={() => {
+                              <span style={{ color: 'var(--text-muted)', marginRight: '6px', fontSize: '0.9rem' }}>⣿</span>
+                              <span style={{ textTransform: 'capitalize', fontSize: '0.85rem', fontWeight: 500 }}>{secName}</span>
+                              <div style={{ display: 'flex', marginLeft: '6px', opacity: 0.7 }}>
+                                <button title="Move Left" style={{ padding: '0px 4px', fontSize: '0.9rem', background: 'transparent', border: 'none', cursor: idx === 0 ? 'default' : 'pointer', color: idx === 0 ? 'var(--border-color)' : 'var(--text-main)' }} disabled={idx === 0} onClick={() => {
                                   const newArr = [...stagedTemplateConfig.section_order];
                                   [newArr[idx - 1], newArr[idx]] = [newArr[idx], newArr[idx - 1]];
                                   setStagedTemplateConfig({ ...stagedTemplateConfig, section_order: newArr });
-                                }}>↑</button>
-                                <button className="btn btn-secondary" style={{ padding: '2px 8px' }} disabled={idx === stagedTemplateConfig.section_order.length - 1} onClick={() => {
+                                }}>‹</button>
+                                <button title="Move Right" style={{ padding: '0px 4px', fontSize: '0.9rem', background: 'transparent', border: 'none', cursor: idx === stagedTemplateConfig.section_order.length - 1 ? 'default' : 'pointer', color: idx === stagedTemplateConfig.section_order.length - 1 ? 'var(--border-color)' : 'var(--text-main)' }} disabled={idx === stagedTemplateConfig.section_order.length - 1} onClick={() => {
                                   const newArr = [...stagedTemplateConfig.section_order];
                                   [newArr[idx + 1], newArr[idx]] = [newArr[idx], newArr[idx + 1]];
                                   setStagedTemplateConfig({ ...stagedTemplateConfig, section_order: newArr });
-                                }}>↓</button>
+                                }}>›</button>
                               </div>
                             </div>
                           ))}
