@@ -31,7 +31,7 @@ export default function ExtractedDataViewer({ data }: { data: any }) {
           {data.profile.summary && (
             <div style={{ marginTop: '20px' }}>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Summary</span>
-              <p style={{ fontSize: '0.95rem', lineHeight: 1.6, margin: 0, color: 'var(--text-main)' }}>{data.profile.summary}</p>
+              <div style={{ fontSize: '0.95rem', lineHeight: 1.6, margin: 0, color: 'var(--text-main)' }} dangerouslySetInnerHTML={{ __html: data.profile.summary }} />
             </div>
           )}
         </div>

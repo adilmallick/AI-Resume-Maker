@@ -929,7 +929,7 @@ export default function DashboardPage() {
                   </div>
                   <div style={{ marginBottom: '24px' }}>
                     <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'block', marginBottom: '4px' }}>Bio / Summary</span>
-                    <p style={{ fontSize: '0.95rem', lineHeight: 1.6 }}>{profile.summary || 'No summary provided.'}</p>
+                    <div style={{ fontSize: '0.95rem', lineHeight: 1.6, color: 'var(--text-muted)' }} dangerouslySetInnerHTML={{ __html: profile.summary || 'No summary provided.' }} />
                   </div>
                   <button className="btn btn-secondary" style={{ width: '100%' }} onClick={() => setIsEditingProfile(true)}>Edit Profile</button>
                 </>
@@ -1051,7 +1051,7 @@ export default function DashboardPage() {
                         <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--error)', borderColor: 'var(--error)' }} onClick={() => handleDeleteExp(exp.id)}>Delete</button>
                       </div>
                     </div>
-                    <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{exp.raw_description}</p>
+                    <div style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: 1.6 }} dangerouslySetInnerHTML={{ __html: exp.raw_description || '' }} />
                   </div>
                 ))}
               </div>
@@ -1334,10 +1334,10 @@ export default function DashboardPage() {
                           <button style={removeBtn} onClick={() => setStagedEducations(stagedEducations.filter((_, i) => i !== idx))}>✕ Remove</button>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                          <div><label style={labelStyle}>Institution</label><input className="form-input" style={inputStyle} placeholder="University Name" value={edu.institution} onChange={e => { const u = [...stagedEducations]; u[idx].institution = e.target.value; setStagedEducations(u); }} /></div>
-                          <div><label style={labelStyle}>Degree</label><input className="form-input" style={inputStyle} placeholder="B.Tech in CS" value={edu.degree} onChange={e => { const u = [...stagedEducations]; u[idx].degree = e.target.value; setStagedEducations(u); }} /></div>
+                          <div><label style={labelStyle}>Institution</label><input className="form-input" style={inputStyle} placeholder="University Name" value={edu.institution || ''} onChange={e => { const u = [...stagedEducations]; u[idx].institution = e.target.value; setStagedEducations(u); }} /></div>
+                          <div><label style={labelStyle}>Degree</label><input className="form-input" style={inputStyle} placeholder="B.Tech in CS" value={edu.degree || ''} onChange={e => { const u = [...stagedEducations]; u[idx].degree = e.target.value; setStagedEducations(u); }} /></div>
                         </div>
-                        <div><label style={labelStyle}>Dates</label><input className="form-input" style={inputStyle} placeholder="Aug 2019 – Jun 2023" value={edu.dates} onChange={e => { const u = [...stagedEducations]; u[idx].dates = e.target.value; setStagedEducations(u); }} /></div>
+                        <div><label style={labelStyle}>Dates</label><input className="form-input" style={inputStyle} placeholder="Aug 2019 – Jun 2023" value={edu.dates || ''} onChange={e => { const u = [...stagedEducations]; u[idx].dates = e.target.value; setStagedEducations(u); }} /></div>
                       </div>
                     ))}
                     <button className="btn btn-secondary" style={{ fontSize: '0.8rem', padding: '7px 14px' }} onClick={() => setStagedEducations([...stagedEducations, { institution: '', degree: '', dates: '' }])}>+ Add Education</button>
@@ -1368,11 +1368,11 @@ export default function DashboardPage() {
                         <button style={removeBtn} onClick={() => setStagedExps(stagedExps.filter((_, i) => i !== idx))}>✕ Remove</button>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '8px' }}>
-                        <div><label style={labelStyle}>Job Title</label><input className="form-input" style={inputStyle} value={exp.job_title} onChange={e => updateStagedExp(idx, 'job_title', e.target.value)} placeholder="e.g. Software Engineer" /></div>
-                        <div><label style={labelStyle}>Company</label><input className="form-input" style={inputStyle} value={exp.company_name} onChange={e => updateStagedExp(idx, 'company_name', e.target.value)} placeholder="e.g. Google" /></div>
+                        <div><label style={labelStyle}>Job Title</label><input className="form-input" style={inputStyle} value={exp.job_title || ''} onChange={e => updateStagedExp(idx, 'job_title', e.target.value)} placeholder="e.g. Software Engineer" /></div>
+                        <div><label style={labelStyle}>Company</label><input className="form-input" style={inputStyle} value={exp.company_name || ''} onChange={e => updateStagedExp(idx, 'company_name', e.target.value)} placeholder="e.g. Google" /></div>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-                        <div><label style={labelStyle}>Start Date</label><input className="form-input" style={inputStyle} value={exp.start_date} onChange={e => updateStagedExp(idx, 'start_date', e.target.value)} placeholder="e.g. 2022-01" /></div>
+                        <div><label style={labelStyle}>Start Date</label><input className="form-input" style={inputStyle} value={exp.start_date || ''} onChange={e => updateStagedExp(idx, 'start_date', e.target.value)} placeholder="e.g. 2022-01" /></div>
                         <div><label style={labelStyle}>End Date</label><input className="form-input" style={inputStyle} value={exp.end_date || ''} onChange={e => updateStagedExp(idx, 'end_date', e.target.value)} placeholder="Leave blank if current" /></div>
                       </div>
                       <label style={labelStyle}>Bullet Points</label>
@@ -1400,7 +1400,7 @@ export default function DashboardPage() {
                         <button style={removeBtn} onClick={() => setStagedProjs(stagedProjs.filter((_, i) => i !== idx))}>✕ Remove</button>
                       </div>
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px', marginBottom: '10px' }}>
-                        <div><label style={labelStyle}>Project Title</label><input className="form-input" style={inputStyle} value={proj.title} onChange={e => updateStagedProj(idx, 'title', e.target.value)} placeholder="e.g. Book Store App" /></div>
+                        <div><label style={labelStyle}>Project Title</label><input className="form-input" style={inputStyle} value={proj.title || ''} onChange={e => updateStagedProj(idx, 'title', e.target.value)} placeholder="e.g. Book Store App" /></div>
                         <div><label style={labelStyle}>Tech Stack</label><input className="form-input" style={inputStyle} value={proj.tech_stack || ''} onChange={e => updateStagedProj(idx, 'tech_stack', e.target.value)} placeholder="React, Node.js, MongoDB" /></div>
                       </div>
                       <label style={labelStyle}>Bullet Points</label>
