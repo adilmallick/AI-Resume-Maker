@@ -64,6 +64,11 @@ class SocialLink(BaseModel):
     url: str
     display_text: str = ""
 
+class TemplateConfig(BaseModel):
+    font_size: str = "11pt"
+    font_family: str = "sans-serif" # "sans-serif" or "serif"
+    section_order: list[str] = ["summary", "experiences", "education", "skills", "projects"]
+
 class ResumePDFRequest(BaseModel):
     """
     Structured dynamic resume data.
@@ -80,38 +85,19 @@ class ResumePDFRequest(BaseModel):
     grouped_skills: list[SkillCategory] = []
     social_links: list[SocialLink] = []
 
+    template_config: TemplateConfig = Field(default_factory=TemplateConfig)
+
 
 # ── Endpoint ───────────────────────────────────────────────────────────────
 
-@router.post(
-    "/generate-resume-pdf",
-    summary="Generate a resume PDF from AI-produced bullet points",
-    response_class=StreamingResponse,
-    responses={
-        200: {
-            "content": {"application/pdf": {}},
-            "description": "Compiled PDF document.",
-        },
-        500: {"description": "LaTeX compilation error or missing pdflatex binary."},
-    },
-)
-async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
-    """
-    Accept structured resume data, inject it into the static LaTeX template,
-    compile to PDF with pdflatex, and return a streaming ``application/pdf``
-    response.
-
-    The LLM **never** writes LaTeX — only sanitized plaintext values are
-    substituted into the predefined template placeholders.
-    """
-    logger.info("PDF generation requested for %s", request.candidate_name)
-
+def build_latex_source(request: ResumePDFRequest) -> str:
     # ── 1. Dynamic Block Builders ──────────────────────────────────────────
     
     # Summary
+    sanitized_summary = sanitize(request.candidate_summary).strip()
     summary_block = ""
-    if request.candidate_summary:
-        summary_block = f"\\section{{Professional Summary}}\n\\small{{{sanitize(request.candidate_summary)}}}\n"
+    if sanitized_summary:
+        summary_block = f"\\section{{Professional Summary}}\n\\small{{{sanitized_summary}}}\n"
 
     # Education
     edu_block = "\\section{Education}\n  \\resumeSubHeadingListStart\n" if request.education_blocks else ""
@@ -192,22 +178,38 @@ async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
     loc_sep = " $|$ " if (phone_fmt or email_fmt) and request.candidate_location else ""
     loc_fmt = f"{loc_sep}\\faMapMarker* \\hspace{{2pt}} {sanitize(request.candidate_location)}" if request.candidate_location else ""
 
+    f_fam = request.template_config.font_family
+    if f_fam == "serif":
+        font_pkg = "\\renewcommand{\\familydefault}{\\rmdefault}"
+    elif f_fam == "monospace":
+        font_pkg = "\\renewcommand{\\familydefault}{\\ttdefault}"
+    else:
+        font_pkg = "\\renewcommand{\\familydefault}{\\sfdefault}"
+
+    blocks = {
+        "summary": summary_block,
+        "experiences": exp_block,
+        "projects": proj_block,
+        "education": edu_block,
+        "skills": skills_block
+    }
+    
+    body_block = "\n\n".join(blocks[sec] for sec in request.template_config.section_order if sec in blocks and blocks[sec])
+
     data = {
         "CANDIDATE_NAME":     sanitize(request.candidate_name),
         "CANDIDATE_EMAIL":    email_fmt,
         "CANDIDATE_PHONE":    phone_fmt,
         "CANDIDATE_LOCATION": loc_fmt,
         "SOCIAL_LINKS_BLOCK": social_block,
-        "SUMMARY_BLOCK":      summary_block,
-        "EXPERIENCES_BLOCK":  exp_block,
-        "PROJECTS_BLOCK":     proj_block,
-        "EDUCATION_BLOCK":    edu_block,
-        "SKILLS_BLOCK":       skills_block,
+        "BODY_BLOCK":         body_block,
+        "DOC_FONT_SIZE":      sanitize(request.template_config.font_size),
+        "DOC_FONT_FAMILY":    font_pkg,
     }
 
     # ── 2. Render template ─────────────────────────────────────────────────
     try:
-        latex_source = render_template(data)
+        return render_template(data)
     except TemplateNotFoundError as exc:
         logger.error("LaTeX template missing: %s", exc)
         raise HTTPException(
@@ -215,9 +217,43 @@ async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
             detail="Server configuration error: LaTeX template not found.",
         ) from exc
 
+
+@router.post(
+    "/preview-latex",
+    summary="Preview raw generated LaTeX source",
+    response_model=dict,
+)
+async def preview_latex(request: ResumePDFRequest):
+    """
+    Returns the raw generated LaTeX string for the given resume data.
+    """
+    latex_source = build_latex_source(request)
+    return {"latex": latex_source}
+
+class RawCompileRequest(BaseModel):
+    latex_source: str
+
+@router.post(
+    "/compile-raw",
+    summary="Compile raw LaTeX string to PDF",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "Compiled PDF document.",
+        },
+        500: {"description": "LaTeX compilation error or missing pdflatex binary."},
+    },
+)
+async def compile_raw_latex(request: RawCompileRequest) -> StreamingResponse:
+    """
+    Accepts a raw LaTeX string and compiles it to PDF using pdflatex.
+    """
+    logger.info("Raw PDF compilation requested (%d bytes of LaTeX)", len(request.latex_source))
+    
     # ── 3. Compile PDF (offloaded from async event loop) ──────────────────
     try:
-        pdf_bytes: bytes = await asyncio.to_thread(compile_latex, latex_source)
+        pdf_bytes: bytes = await asyncio.to_thread(compile_latex, request.latex_source)
     except FileNotFoundError as exc:
         # pdflatex not installed
         logger.error("pdflatex binary not found: %s", exc)
@@ -251,3 +287,25 @@ async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
             "Content-Length": str(len(pdf_bytes)),
         },
     )
+
+@router.post(
+    "/generate-resume-pdf",
+    summary="Generate a resume PDF from AI-produced bullet points",
+    response_class=StreamingResponse,
+    responses={
+        200: {
+            "content": {"application/pdf": {}},
+            "description": "Compiled PDF document.",
+        },
+        500: {"description": "LaTeX compilation error or missing pdflatex binary."},
+    },
+)
+async def generate_resume_pdf(request: ResumePDFRequest) -> StreamingResponse:
+    """
+    Accept structured resume data, inject it into the static LaTeX template,
+    compile to PDF with pdflatex, and return a streaming ``application/pdf``
+    response.
+    """
+    logger.info("PDF generation requested for %s", request.candidate_name)
+    latex_source = build_latex_source(request)
+    return await compile_raw_latex(RawCompileRequest(latex_source=latex_source))

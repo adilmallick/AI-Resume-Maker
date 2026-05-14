@@ -34,11 +34,9 @@ ALLOWED_PLACEHOLDERS: frozenset[str] = frozenset(
         "CANDIDATE_PHONE",
         "CANDIDATE_LOCATION",
         "SOCIAL_LINKS_BLOCK",
-        "SUMMARY_BLOCK",
-        "EXPERIENCES_BLOCK",
-        "PROJECTS_BLOCK",
-        "EDUCATION_BLOCK",
-        "SKILLS_BLOCK"
+        "BODY_BLOCK",
+        "DOC_FONT_SIZE",
+        "DOC_FONT_FAMILY"
     }
 )
 

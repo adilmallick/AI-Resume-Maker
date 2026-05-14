@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from pdf.router import router as pdf_router
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from scraper.extractor import extract_job_info
+from scraper.extractor import extract_job_info, extract_from_text
 import logging
 import asyncio
 import os
@@ -195,8 +195,19 @@ async def generate_resume_endpoint(
 
         # Get the job description
         job_description = ""
+        job_data = None
+        
         if request.job_text:
-            job_description = request.job_text
+            try:
+                job_data = await asyncio.to_thread(extract_from_text, request.job_text)
+                job_description = (
+                    f"Title: {job_data.get('title')}\n"
+                    f"Description:\n{job_data.get('description')}\n"
+                    f"Requirements:\n{', '.join(job_data.get('requirements', []))}"
+                )
+            except Exception as e:
+                logger.error(f"Failed to extract from job text: {e}")
+                job_description = request.job_text
         else:
             url = request.job_url.strip()
             if not url.startswith(("http://", "https://")):
@@ -227,6 +238,10 @@ async def generate_resume_endpoint(
         logger.info(f"[AI RESPONSE] technical_skills count: {len(ai_response.get('technical_skills', []))}")
         logger.info(f"[AI RESPONSE] experiences count: {len(ai_response.get('experiences', []))}")
         logger.info(f"[AI RESPONSE] projects count: {len(ai_response.get('projects', []))}")
+        
+        ai_response["job_description"] = job_description
+        ai_response["job_data"] = job_data
+        
         logger.info(f"[AI RESPONSE] full payload: {ai_response}")
         return ai_response
     except Exception as e:
