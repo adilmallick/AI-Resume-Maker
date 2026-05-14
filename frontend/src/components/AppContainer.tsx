@@ -2,12 +2,31 @@
 
 import { useAuth } from "@/contexts/AuthContext";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import ThemeToggle from "./ThemeToggle";
+import { useEffect } from "react";
 
 export default function AppContainer({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, logout, isLoading } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!isLoading && !user) {
+      if (pathname !== '/login' && pathname !== '/signup') {
+        router.push('/login');
+      }
+    }
+  }, [isLoading, user, pathname, router]);
+
+  if (isLoading) {
+    return <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: 'var(--text-muted)' }}>Loading...</div>;
+  }
+
+  // Prevent flashing of protected content while redirecting
+  if (!user && pathname !== '/login' && pathname !== '/signup') {
+    return null;
+  }
 
   return (
     <div className="app-layout" style={{ flexDirection: "column" }}>

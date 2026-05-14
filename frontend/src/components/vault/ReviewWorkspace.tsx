@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
 import RichTextEditor from '@/components/RichTextEditor';
-import ExtractedDataViewer from '@/components/ExtractedDataViewer';
 import { ATSResult } from '@/types/ats';
 import { useAuth } from '@/contexts/AuthContext';
 
