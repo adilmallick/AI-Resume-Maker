@@ -91,11 +91,9 @@ async def save_extracted(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    strategy = request.strategy
     data = request.data
-    
-    if strategy not in ["append", "overwrite"]:
-        raise HTTPException(status_code=400, detail="Strategy must be 'append' or 'overwrite'")
+    # Always overwrite
+    strategy = "overwrite"
 
     try:
         # Save Profile

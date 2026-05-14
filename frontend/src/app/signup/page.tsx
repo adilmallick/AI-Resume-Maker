@@ -55,7 +55,7 @@ export default function SignupPage() {
         )}
 
         <form onSubmit={handleSignup}>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+          <div className="name-grid">
             <div className="form-group">
               <label className="form-label">First Name</label>
               <input

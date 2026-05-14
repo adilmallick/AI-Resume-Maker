@@ -10,7 +10,7 @@ import { ATSResult } from '@/types/ats';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export default function DashboardPage() {
+export default function VaultPage() {
   const { token, user } = useAuth();
   const router = useRouter();
 
@@ -96,7 +96,7 @@ export default function DashboardPage() {
   const [extractedResumeData, setExtractedResumeData] = useState<any>(null);
   const [tailoredResumeData, setTailoredResumeData] = useState<any>(null);
   const [activeReviewMode, setActiveReviewMode] = useState<'ai' | 'original'>('ai');
-  const [resumeMergeStrategy, setResumeMergeStrategy] = useState<"append" | "overwrite">("append");
+  // Strategy is always overwrite now
 
   // Section Ordering Drag and Drop State
   const dragItem = useRef<number | null>(null);
@@ -571,7 +571,7 @@ export default function DashboardPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          strategy: resumeMergeStrategy,
+          strategy: "overwrite",
           data: extractedResumeData,
         }),
       });
@@ -994,7 +994,7 @@ export default function DashboardPage() {
         <div className="dashboard-grid">
 
           {/* Profile Column */}
-          <div style={{ position: 'sticky', top: '100px', display: 'flex', flexDirection: 'column', gap: '20px', alignSelf: 'start' }}>
+          <div className="profile-column">
             <div className="glass-panel" style={{ padding: '30px' }}>
               <h3 style={{ marginBottom: '20px', color: 'var(--accent-light)' }}>Profile Core</h3>
 
@@ -1080,7 +1080,7 @@ export default function DashboardPage() {
               <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>AI Resume Generator ⚡</h2>
               <p className="title-sub" style={{ marginBottom: '20px', fontSize: '0.9rem' }}>Instantly compile your Vault experiences matching a target job description.</p>
 
-              <form onSubmit={handleGenerate} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+              <form onSubmit={handleGenerate} style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-start' }}>
                 <textarea
                   className="form-input"
                   style={{ flex: 1, minHeight: '60px', maxHeight: '300px', resize: 'vertical' }}
@@ -1333,12 +1333,12 @@ export default function DashboardPage() {
       {isReviewing && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}>
+          <div className="review-header" style={{ padding: '15px 30px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}>
             <div>
               <h2 style={{ fontSize: '1.2rem', color: 'var(--success)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{ fontSize: '1.4rem' }}>✨</span> Review PDF Outline</h2>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Edits will NOT overwrite your master Vault.</span>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="review-header-buttons" style={{ display: 'flex', gap: '10px' }}>
               <button className="btn btn-secondary" onClick={() => setIsReviewing(false)} style={{ padding: '6px 15px', fontSize: '0.9rem' }}>Cancel</button>
               
               <button
@@ -1375,10 +1375,10 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <div className="review-workspace-layout">
 
             {/* ─── Left: Editor Panel (55%) ─── */}
-            <div style={{ width: '55%', overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column' }} className="custom-scrollbar">
+            <div className="review-editor-panel custom-scrollbar">
 
               {/* Job Details Accordion */}
               {url && (
@@ -1631,7 +1631,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                 {/* Mode Toggle */}
                 <div style={{ display: 'flex', background: 'var(--glass-bg)', borderRadius: '20px', border: '1px solid var(--glass-border)', padding: '3px' }}>
                   <button onClick={() => toggleEditorMode('visual')} style={{ padding: '5px 16px', fontSize: '0.85rem', borderRadius: '16px', background: editorMode === 'visual' ? 'var(--accent)' : 'transparent', color: editorMode === 'visual' ? '#fff' : 'var(--text-muted)', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
@@ -1860,7 +1860,7 @@ export default function DashboardPage() {
             </div>
 
             {/* ─── Right: PDF Preview (45%) ─── */}
-            <div style={{ width: '45%', background: '#525659', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderLeft: '1px solid var(--border-color)' }}>
+            <div className="review-preview-panel">
               {/* PDF mini toolbar */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', background: '#323639', borderBottom: '1px solid rgba(0,0,0,0.5)' }}>
                 <h3 style={{ fontSize: '0.85rem', color: '#ccc', margin: 0, fontWeight: 500 }}>PDF Preview</h3>
@@ -1908,22 +1908,12 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}>
             <div>
               <h2 style={{ fontSize: '1.2rem', color: 'var(--success)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>Review Extracted Data</h2>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Choose how to save this data to your Vault.</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Saving this data will overwrite your existing Vault.</span>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <select
-                className="form-input"
-                style={{ padding: '6px 10px', width: 'auto', marginBottom: 0 }}
-                value={resumeMergeStrategy}
-                onChange={(e) => setResumeMergeStrategy(e.target.value as any)}
-                disabled={resumeUploadStatus === "loading"}
-              >
-                <option value="append">Append to existing Vault</option>
-                <option value="overwrite">Overwrite existing Vault</option>
-              </select>
               <button className="btn btn-secondary" onClick={() => setIsPreviewingResume(false)} disabled={resumeUploadStatus === "loading"}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSaveExtractedData} disabled={resumeUploadStatus === "loading"}>
-                {resumeUploadStatus === "loading" ? "Saving..." : "Save to Vault"}
+                {resumeUploadStatus === "loading" ? "Saving..." : "Overwrite Vault"}
               </button>
             </div>
           </div>
@@ -1939,7 +1929,7 @@ export default function DashboardPage() {
                     <span style={{ fontSize: '1.2rem' }}>📄</span> Parsed Resume Content
                   </h3>
                   <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
-                    Please review the data extracted from your PDF below before appending or overwriting it to your Vault.
+                    Please review the data extracted from your PDF below before overwriting your Vault.
                   </p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '600px', overflowY: 'auto', paddingRight: '10px' }} className="custom-scrollbar">
                     {extractedResumeData.profile && (
