@@ -26,9 +26,9 @@ export default function Home() {
           ) : (
               <div>
                   <h3 style={{ marginBottom: '16px' }}>Welcome back to your Vault</h3>
-                  <p style={{ marginBottom: '24px', color: 'var(--text-muted)' }}>Manage your profile, experiences, and generate targeted PDFs directly from your dashboard.</p>
-                  <Link href="/dashboard" className="btn btn-primary" style={{ display: 'inline-block', width: '100%', fontSize: '1.2rem', padding: '16px' }}>
-                      Go to Dashboard ⚡
+                  <p style={{ marginBottom: '24px', color: 'var(--text-muted)' }}>Manage your profile, experiences, and generate targeted PDFs directly from your Career Vault.</p>
+                  <Link href="/vault" className="btn btn-primary" style={{ display: 'inline-block', width: '100%', fontSize: '1.2rem', padding: '16px' }}>
+                      Go to Career Vault ⚡
                   </Link>
               </div>
           )}

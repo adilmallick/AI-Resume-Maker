@@ -4,13 +4,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import RichTextEditor from '@/components/RichTextEditor';
-import ExtractedDataViewer from '@/components/ExtractedDataViewer';
+import Modal from '@/components/Modal';
 import LaTeXEditor from '@/components/LaTeXEditor';
 import { ATSResult } from '@/types/ats';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
-export default function DashboardPage() {
+export default function VaultPage() {
   const { token, user } = useAuth();
   const router = useRouter();
 
@@ -96,7 +96,7 @@ export default function DashboardPage() {
   const [extractedResumeData, setExtractedResumeData] = useState<any>(null);
   const [tailoredResumeData, setTailoredResumeData] = useState<any>(null);
   const [activeReviewMode, setActiveReviewMode] = useState<'ai' | 'original'>('ai');
-  const [resumeMergeStrategy, setResumeMergeStrategy] = useState<"append" | "overwrite">("append");
+  // Strategy is always overwrite now
 
   // Section Ordering Drag and Drop State
   const dragItem = useRef<number | null>(null);
@@ -164,8 +164,9 @@ export default function DashboardPage() {
   const bustVaultCache = () => sessionStorage.removeItem(VAULT_CACHE_KEY);
   // ────────────────────────────────────────────────────────
 
-  const fetchVault = async (forceRefresh = false) => {
-    // Serve from cache unless a write operation just happened
+  const fetchVault = async (forceRefresh = true) => {
+    // Always fetch from server to prevent desync bugs with ghost IDs
+    /*
     if (!forceRefresh) {
       const cached = loadVaultCache();
       if (cached) {
@@ -186,6 +187,7 @@ export default function DashboardPage() {
         return; // ← skip API calls
       }
     }
+    */
     try {
       const headers = { Authorization: `Bearer ${token}` };
       let p = {};
@@ -286,6 +288,7 @@ export default function DashboardPage() {
   };
 
   const handleDeleteExp = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this experience?")) return;
     try {
       const res = await fetch(`${API_URL}/api/vault/experiences/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
@@ -345,6 +348,7 @@ export default function DashboardPage() {
   };
 
   const handleDeleteProj = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this project?")) return;
     try {
       const res = await fetch(`${API_URL}/api/vault/projects/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
@@ -395,6 +399,7 @@ export default function DashboardPage() {
   };
 
   const handleDeleteEdu = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this education entry?")) return;
     try {
       const res = await fetch(`${API_URL}/api/vault/educations/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
@@ -443,6 +448,7 @@ export default function DashboardPage() {
   };
 
   const handleDeleteSocial = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this social link?")) return;
     try {
       const res = await fetch(`${API_URL}/api/vault/socials/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
@@ -507,6 +513,7 @@ export default function DashboardPage() {
   };
 
   const handleDeleteSkill = async (id: string) => {
+    if (!window.confirm("Are you sure you want to delete this skill?")) return;
     try {
       const res = await fetch(`${API_URL}/api/vault/skills/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` } });
       if (res.ok) {
@@ -564,7 +571,7 @@ export default function DashboardPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          strategy: resumeMergeStrategy,
+          strategy: "overwrite",
           data: extractedResumeData,
         }),
       });
@@ -677,7 +684,7 @@ export default function DashboardPage() {
     setIsAtsPanelOpen(true);
     try {
       const payload = {
-        job_input: url,
+        job_input: tailoredResumeData?.job_description || url,
         resume_data: {
           profile: stagedProfile,
           experiences: stagedExps,
@@ -695,7 +702,9 @@ export default function DashboardPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        throw new Error(err.detail || 'Failed to calculate ATS score');
+        console.error("ATS Score error:", err);
+        setAtsStatus('error');
+        return;
       }
 
       const data = await res.json();
@@ -985,7 +994,7 @@ export default function DashboardPage() {
         <div className="dashboard-grid">
 
           {/* Profile Column */}
-          <div style={{ position: 'sticky', top: '100px', display: 'flex', flexDirection: 'column', gap: '20px', alignSelf: 'start' }}>
+          <div className="profile-column">
             <div className="glass-panel" style={{ padding: '30px' }}>
               <h3 style={{ marginBottom: '20px', color: 'var(--accent-light)' }}>Profile Core</h3>
 
@@ -1071,7 +1080,7 @@ export default function DashboardPage() {
               <h2 style={{ fontSize: '1.5rem', marginBottom: '8px' }}>AI Resume Generator ⚡</h2>
               <p className="title-sub" style={{ marginBottom: '20px', fontSize: '0.9rem' }}>Instantly compile your Vault experiences matching a target job description.</p>
 
-              <form onSubmit={handleGenerate} style={{ display: 'flex', gap: '10px', alignItems: 'flex-start' }}>
+              <form onSubmit={handleGenerate} style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', alignItems: 'flex-start' }}>
                 <textarea
                   className="form-input"
                   style={{ flex: 1, minHeight: '60px', maxHeight: '300px', resize: 'vertical' }}
@@ -1108,26 +1117,27 @@ export default function DashboardPage() {
               </div>
 
               {isAddingExp && (
-                <form onSubmit={handleSaveExp} className="glass-card" style={{ marginBottom: '20px', border: '1px solid var(--accent)' }}>
-                  <h4 style={{ marginBottom: '15px' }}>{editingExpId ? 'Edit Experience' : 'Add New Experience'}</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" placeholder="Company Name *" value={expForm.company_name} onChange={e => setExpForm({ ...expForm, company_name: e.target.value })} required />
-                    <input className="form-input" placeholder="Job Title *" value={expForm.job_title} onChange={e => setExpForm({ ...expForm, job_title: e.target.value })} required />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" placeholder="Location" value={expForm.location} onChange={e => setExpForm({ ...expForm, location: e.target.value })} />
-                    <input className="form-input" type="date" placeholder="Start Date" value={expForm.start_date} onChange={e => setExpForm({ ...expForm, start_date: e.target.value })} required />
-                    <input className="form-input" type="date" placeholder="End Date" value={expForm.end_date} onChange={e => setExpForm({ ...expForm, end_date: e.target.value })} />
-                  </div>
-                  <div style={{ marginBottom: '15px' }}>
-                    <label style={labelStyle}>Raw Bullet Points or Description</label>
-                    <RichTextEditor value={expForm.raw_description} onChange={(val) => setExpForm({ ...expForm, raw_description: val })} placeholder="Raw Bullet Points or Description" />
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="btn btn-primary" type="submit" disabled={isSavingExp}>{isSavingExp ? "Saving..." : "Save Experience"}</button>
-                    <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingExp(false); setEditingExpId(null); setExpForm({ company_name: '', job_title: '', location: '', start_date: '', end_date: '', raw_description: '' }); }} disabled={isSavingExp}>Cancel</button>
-                  </div>
-                </form>
+                <Modal isOpen={isAddingExp} onClose={() => { setIsAddingExp(false); setEditingExpId(null); setExpForm({ company_name: '', job_title: '', location: '', start_date: '', end_date: '', raw_description: '' }); }} title={editingExpId ? 'Edit Experience' : 'Add New Experience'}>
+                  <form onSubmit={handleSaveExp} style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input className="form-input" placeholder="Company Name *" value={expForm.company_name} onChange={e => setExpForm({ ...expForm, company_name: e.target.value })} required />
+                      <input className="form-input" placeholder="Job Title *" value={expForm.job_title} onChange={e => setExpForm({ ...expForm, job_title: e.target.value })} required />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input className="form-input" placeholder="Location" value={expForm.location} onChange={e => setExpForm({ ...expForm, location: e.target.value })} />
+                      <input className="form-input" type="date" placeholder="Start Date" value={expForm.start_date} onChange={e => setExpForm({ ...expForm, start_date: e.target.value })} required />
+                      <input className="form-input" type="date" placeholder="End Date" value={expForm.end_date} onChange={e => setExpForm({ ...expForm, end_date: e.target.value })} />
+                    </div>
+                    <div style={{ marginBottom: '15px' }}>
+                      <label style={labelStyle}>Raw Bullet Points or Description</label>
+                      <RichTextEditor value={expForm.raw_description} onChange={(val) => setExpForm({ ...expForm, raw_description: val })} placeholder="Raw Bullet Points or Description" />
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="btn btn-primary" type="submit" disabled={isSavingExp}>{isSavingExp ? "Saving..." : "Save Experience"}</button>
+                      <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingExp(false); setEditingExpId(null); setExpForm({ company_name: '', job_title: '', location: '', start_date: '', end_date: '', raw_description: '' }); }} disabled={isSavingExp}>Cancel</button>
+                    </div>
+                  </form>
+                </Modal>
               )}
 
               <div className="dashboard-list">
@@ -1160,30 +1170,31 @@ export default function DashboardPage() {
               </div>
 
               {isAddingProj && (
-                <form onSubmit={handleSaveProj} className="glass-card" style={{ marginBottom: '20px', border: '1px solid var(--accent)' }}>
-                  <h4 style={{ marginBottom: '15px' }}>{editingProjId ? 'Edit Project' : 'Add New Project'}</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" placeholder="Project Title *" value={projForm.title} onChange={e => setProjForm({ ...projForm, title: e.target.value })} required />
-                    <input className="form-input" placeholder="Your Role (Optional)" value={projForm.role} onChange={e => setProjForm({ ...projForm, role: e.target.value })} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" type="date" placeholder="Start Date" value={projForm.start_date} onChange={e => setProjForm({ ...projForm, start_date: e.target.value })} />
-                    <input className="form-input" type="date" placeholder="End Date" value={projForm.end_date} onChange={e => setProjForm({ ...projForm, end_date: e.target.value })} />
-                  </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" placeholder="Repository URL (e.g. GitHub)" value={projForm.repository_url} onChange={e => setProjForm({ ...projForm, repository_url: e.target.value })} />
-                    <input className="form-input" placeholder="Live Demo URL (Optional)" value={projForm.live_demo_url} onChange={e => setProjForm({ ...projForm, live_demo_url: e.target.value })} />
-                  </div>
-                  <input className="form-input" style={{ width: '100%', marginBottom: '10px' }} placeholder="Tech Stack (comma separated: React, Node.js, NextJS)" value={projForm.tech_stack} onChange={e => setProjForm({ ...projForm, tech_stack: e.target.value })} />
-                  <div style={{ marginBottom: '15px' }}>
-                    <label style={labelStyle}>Project Description or Bullets</label>
-                    <RichTextEditor value={projForm.raw_description} onChange={(val) => setProjForm({ ...projForm, raw_description: val })} placeholder="Project Description or Bullets" />
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="btn btn-primary" type="submit" disabled={isSavingProj}>{isSavingProj ? "Saving..." : "Save Project"}</button>
-                    <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingProj(false); setEditingProjId(null); setProjForm({ title: '', role: '', tech_stack: '', repository_url: '', live_demo_url: '', start_date: '', end_date: '', raw_description: '' }); }} disabled={isSavingProj}>Cancel</button>
-                  </div>
-                </form>
+                <Modal isOpen={isAddingProj} onClose={() => { setIsAddingProj(false); setEditingProjId(null); setProjForm({ title: '', role: '', tech_stack: '', repository_url: '', live_demo_url: '', start_date: '', end_date: '', raw_description: '' }); }} title={editingProjId ? 'Edit Project' : 'Add New Project'}>
+                  <form onSubmit={handleSaveProj} style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input className="form-input" placeholder="Project Title *" value={projForm.title} onChange={e => setProjForm({ ...projForm, title: e.target.value })} required />
+                      <input className="form-input" placeholder="Your Role (Optional)" value={projForm.role} onChange={e => setProjForm({ ...projForm, role: e.target.value })} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input className="form-input" type="date" placeholder="Start Date" value={projForm.start_date} onChange={e => setProjForm({ ...projForm, start_date: e.target.value })} />
+                      <input className="form-input" type="date" placeholder="End Date" value={projForm.end_date} onChange={e => setProjForm({ ...projForm, end_date: e.target.value })} />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input className="form-input" placeholder="Repository URL (e.g. GitHub)" value={projForm.repository_url} onChange={e => setProjForm({ ...projForm, repository_url: e.target.value })} />
+                      <input className="form-input" placeholder="Live Demo URL (Optional)" value={projForm.live_demo_url} onChange={e => setProjForm({ ...projForm, live_demo_url: e.target.value })} />
+                    </div>
+                    <input className="form-input" style={{ width: '100%', marginBottom: '10px' }} placeholder="Tech Stack (comma separated: React, Node.js, NextJS)" value={projForm.tech_stack} onChange={e => setProjForm({ ...projForm, tech_stack: e.target.value })} />
+                    <div style={{ marginBottom: '15px' }}>
+                      <label style={labelStyle}>Project Description or Bullets</label>
+                      <RichTextEditor value={projForm.raw_description} onChange={(val) => setProjForm({ ...projForm, raw_description: val })} placeholder="Project Description or Bullets" />
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="btn btn-primary" type="submit" disabled={isSavingProj}>{isSavingProj ? "Saving..." : "Save Project"}</button>
+                      <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingProj(false); setEditingProjId(null); setProjForm({ title: '', role: '', tech_stack: '', repository_url: '', live_demo_url: '', start_date: '', end_date: '', raw_description: '' }); }} disabled={isSavingProj}>Cancel</button>
+                    </div>
+                  </form>
+                </Modal>
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
@@ -1202,6 +1213,9 @@ export default function DashboardPage() {
                         <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--error)', borderColor: 'var(--error)' }} onClick={() => handleDeleteProj(proj.id)}>Delete</button>
                       </div>
                     </div>
+                    {proj.raw_description && (
+                      <div className="prose prose-sm prose-invert max-w-none mt-2 text-sm text-[var(--text-muted)]" dangerouslySetInnerHTML={{ __html: proj.raw_description }} />
+                    )}
                     {proj.tech_stack && proj.tech_stack.length > 0 && (
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '4px' }}>
                         {proj.tech_stack.map((tech: string) => (
@@ -1224,22 +1238,23 @@ export default function DashboardPage() {
               </div>
 
               {isAddingEdu && (
-                <form onSubmit={handleSaveEdu} className="glass-card" style={{ marginBottom: '20px', border: '1px solid var(--accent)' }}>
-                  <h4 style={{ marginBottom: '15px' }}>{editingEduId ? 'Edit Education Route' : 'Add Education Route'}</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" placeholder="Institution *" value={eduForm.institution} onChange={e => setEduForm({ ...eduForm, institution: e.target.value })} required />
-                    <input className="form-input" placeholder="Degree *" value={eduForm.degree} onChange={e => setEduForm({ ...eduForm, degree: e.target.value })} required />
-                  </div>
-                  <input className="form-input" style={{ width: '100%', marginBottom: '10px' }} placeholder="Field of Study *" value={eduForm.field_of_study} onChange={e => setEduForm({ ...eduForm, field_of_study: e.target.value })} required />
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
-                    <input className="form-input" type="date" placeholder="Start Date *" value={eduForm.start_date} onChange={e => setEduForm({ ...eduForm, start_date: e.target.value })} required />
-                    <input className="form-input" type="date" placeholder="End Date (Optional)" value={eduForm.end_date} onChange={e => setEduForm({ ...eduForm, end_date: e.target.value })} />
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="btn btn-primary" type="submit" disabled={isSavingEdu}>{isSavingEdu ? "Saving..." : "Save Education"}</button>
-                    <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingEdu(false); setEditingEduId(null); setEduForm({ institution: '', degree: '', field_of_study: '', start_date: '', end_date: '' }); }} disabled={isSavingEdu}>Cancel</button>
-                  </div>
-                </form>
+                <Modal isOpen={isAddingEdu} onClose={() => { setIsAddingEdu(false); setEditingEduId(null); setEduForm({ institution: '', degree: '', field_of_study: '', start_date: '', end_date: '' }); }} title={editingEduId ? 'Edit Education Route' : 'Add Education Route'}>
+                  <form onSubmit={handleSaveEdu} style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '10px' }}>
+                      <input className="form-input" placeholder="Institution *" value={eduForm.institution} onChange={e => setEduForm({ ...eduForm, institution: e.target.value })} required />
+                      <input className="form-input" placeholder="Degree *" value={eduForm.degree} onChange={e => setEduForm({ ...eduForm, degree: e.target.value })} required />
+                    </div>
+                    <input className="form-input" style={{ width: '100%', marginBottom: '10px' }} placeholder="Field of Study *" value={eduForm.field_of_study} onChange={e => setEduForm({ ...eduForm, field_of_study: e.target.value })} required />
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px' }}>
+                      <input className="form-input" type="date" placeholder="Start Date *" value={eduForm.start_date} onChange={e => setEduForm({ ...eduForm, start_date: e.target.value })} required />
+                      <input className="form-input" type="date" placeholder="End Date (Optional)" value={eduForm.end_date} onChange={e => setEduForm({ ...eduForm, end_date: e.target.value })} />
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="btn btn-primary" type="submit" disabled={isSavingEdu}>{isSavingEdu ? "Saving..." : "Save Education"}</button>
+                      <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingEdu(false); setEditingEduId(null); setEduForm({ institution: '', degree: '', field_of_study: '', start_date: '', end_date: '' }); }} disabled={isSavingEdu}>Cancel</button>
+                    </div>
+                  </form>
+                </Modal>
               )}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -1272,17 +1287,18 @@ export default function DashboardPage() {
               </div>
 
               {isAddingSkill && (
-                <form onSubmit={handleSaveSkill} className="glass-card" style={{ marginBottom: '20px', border: '1px solid var(--accent)' }}>
-                  <h4 style={{ marginBottom: '15px' }}>{editingSkillId ? 'Edit Skill' : 'Batch Add Technical Skills'}</h4>
-                  <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-                    <input className="form-input" style={{ width: '200px' }} placeholder="Category (e.g. Languages) *" value={skillForm.category} onChange={e => setSkillForm({ ...skillForm, category: e.target.value })} required />
-                    <input className="form-input" style={{ flex: 1 }} placeholder="Comma Separated Skills *" value={skillForm.skill_name} onChange={e => setSkillForm({ ...skillForm, skill_name: e.target.value })} required />
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px' }}>
-                    <button className="btn btn-primary" type="submit" disabled={isSavingSkill}>{isSavingSkill ? "Saving..." : "Save Skills"}</button>
-                    <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingSkill(false); setEditingSkillId(null); setSkillForm({ skill_name: '', category: '' }); }} disabled={isSavingSkill}>Cancel</button>
-                  </div>
-                </form>
+                <Modal isOpen={isAddingSkill} onClose={() => { setIsAddingSkill(false); setEditingSkillId(null); setSkillForm({ skill_name: '', category: '' }); }} title={editingSkillId ? 'Edit Skill' : 'Batch Add Technical Skills'}>
+                  <form onSubmit={handleSaveSkill} style={{ marginBottom: '10px' }}>
+                    <div style={{ display: 'flex', gap: '10px', marginBottom: '15px' }}>
+                      <input className="form-input" style={{ width: '200px' }} placeholder="Category (e.g. Languages) *" value={skillForm.category} onChange={e => setSkillForm({ ...skillForm, category: e.target.value })} required />
+                      <input className="form-input" style={{ flex: 1 }} placeholder="Comma Separated Skills *" value={skillForm.skill_name} onChange={e => setSkillForm({ ...skillForm, skill_name: e.target.value })} required />
+                    </div>
+                    <div style={{ display: 'flex', gap: '10px' }}>
+                      <button className="btn btn-primary" type="submit" disabled={isSavingSkill}>{isSavingSkill ? "Saving..." : "Save Skills"}</button>
+                      <button className="btn btn-secondary" type="button" onClick={() => { setIsAddingSkill(false); setEditingSkillId(null); setSkillForm({ skill_name: '', category: '' }); }} disabled={isSavingSkill}>Cancel</button>
+                    </div>
+                  </form>
+                </Modal>
               )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '10px' }}>
@@ -1317,12 +1333,12 @@ export default function DashboardPage() {
       {isReviewing && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'var(--bg-main)', display: 'flex', flexDirection: 'column' }}>
 
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}>
+          <div className="review-header" style={{ padding: '15px 30px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}>
             <div>
               <h2 style={{ fontSize: '1.2rem', color: 'var(--success)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}><span style={{ fontSize: '1.4rem' }}>✨</span> Review PDF Outline</h2>
               <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Edits will NOT overwrite your master Vault.</span>
             </div>
-            <div style={{ display: 'flex', gap: '10px' }}>
+            <div className="review-header-buttons" style={{ display: 'flex', gap: '10px' }}>
               <button className="btn btn-secondary" onClick={() => setIsReviewing(false)} style={{ padding: '6px 15px', fontSize: '0.9rem' }}>Cancel</button>
               
               <button
@@ -1359,10 +1375,10 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+          <div className="review-workspace-layout">
 
             {/* ─── Left: Editor Panel (55%) ─── */}
-            <div style={{ width: '55%', overflowY: 'auto', padding: '20px 24px', display: 'flex', flexDirection: 'column' }} className="custom-scrollbar">
+            <div className="review-editor-panel custom-scrollbar">
 
               {/* Job Details Accordion */}
               {url && (
@@ -1615,7 +1631,7 @@ export default function DashboardPage() {
                 </div>
               )}
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '10px' }}>
                 {/* Mode Toggle */}
                 <div style={{ display: 'flex', background: 'var(--glass-bg)', borderRadius: '20px', border: '1px solid var(--glass-border)', padding: '3px' }}>
                   <button onClick={() => toggleEditorMode('visual')} style={{ padding: '5px 16px', fontSize: '0.85rem', borderRadius: '16px', background: editorMode === 'visual' ? 'var(--accent)' : 'transparent', color: editorMode === 'visual' ? '#fff' : 'var(--text-muted)', border: 'none', cursor: 'pointer', transition: 'all 0.2s ease' }}>
@@ -1844,7 +1860,7 @@ export default function DashboardPage() {
             </div>
 
             {/* ─── Right: PDF Preview (45%) ─── */}
-            <div style={{ width: '45%', background: '#525659', display: 'flex', flexDirection: 'column', overflow: 'hidden', borderLeft: '1px solid var(--border-color)' }}>
+            <div className="review-preview-panel">
               {/* PDF mini toolbar */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 20px', background: '#323639', borderBottom: '1px solid rgba(0,0,0,0.5)' }}>
                 <h3 style={{ fontSize: '0.85rem', color: '#ccc', margin: 0, fontWeight: 500 }}>PDF Preview</h3>
@@ -1892,22 +1908,12 @@ export default function DashboardPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '15px 30px', background: 'var(--bg-card)', borderBottom: '1px solid var(--border-color)' }}>
             <div>
               <h2 style={{ fontSize: '1.2rem', color: 'var(--success)', margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>Review Extracted Data</h2>
-              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Choose how to save this data to your Vault.</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Saving this data will overwrite your existing Vault.</span>
             </div>
             <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-              <select
-                className="form-input"
-                style={{ padding: '6px 10px', width: 'auto', marginBottom: 0 }}
-                value={resumeMergeStrategy}
-                onChange={(e) => setResumeMergeStrategy(e.target.value as any)}
-                disabled={resumeUploadStatus === "loading"}
-              >
-                <option value="append">Append to existing Vault</option>
-                <option value="overwrite">Overwrite existing Vault</option>
-              </select>
               <button className="btn btn-secondary" onClick={() => setIsPreviewingResume(false)} disabled={resumeUploadStatus === "loading"}>Cancel</button>
               <button className="btn btn-primary" onClick={handleSaveExtractedData} disabled={resumeUploadStatus === "loading"}>
-                {resumeUploadStatus === "loading" ? "Saving..." : "Save to Vault"}
+                {resumeUploadStatus === "loading" ? "Saving..." : "Overwrite Vault"}
               </button>
             </div>
           </div>
@@ -1916,7 +1922,117 @@ export default function DashboardPage() {
               {resumeUploadStatus === "error" && resumeUploadError && (
                 <div className="alert alert-error" style={{ marginBottom: '20px' }}>{resumeUploadError}</div>
               )}
-              <ExtractedDataViewer data={extractedResumeData} />
+              
+              {extractedResumeData && (
+                <div style={{ background: 'var(--glass-bg)', padding: '24px', borderRadius: '12px', border: '1px solid var(--glass-border)' }}>
+                  <h3 style={{ marginTop: 0, marginBottom: '16px', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontSize: '1.2rem' }}>📄</span> Parsed Resume Content
+                  </h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '16px' }}>
+                    Please review the data extracted from your PDF below before overwriting your Vault.
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', maxHeight: '600px', overflowY: 'auto', paddingRight: '10px' }} className="custom-scrollbar">
+                    {extractedResumeData.profile && (
+                      <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--accent)', fontSize: '1rem' }}>Profile</h4>
+                        <p style={{ margin: 0, color: 'var(--text-main)', fontWeight: 600 }}>{extractedResumeData.profile.first_name} {extractedResumeData.profile.last_name}</p>
+                        <p style={{ margin: '4px 0', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                          {[extractedResumeData.profile.email, extractedResumeData.profile.phone, extractedResumeData.profile.location].filter(Boolean).join(' • ')}
+                        </p>
+                        {extractedResumeData.profile.summary && <p style={{ margin: '10px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}>{extractedResumeData.profile.summary}</p>}
+                      </div>
+                    )}
+                    
+                    {extractedResumeData.experiences?.length > 0 && (
+                      <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--accent)', fontSize: '1rem' }}>Experience</h4>
+                        {extractedResumeData.experiences.map((exp: any, i: number) => (
+                          <div key={i} style={{ marginBottom: i < extractedResumeData.experiences.length - 1 ? '16px' : 0, paddingBottom: i < extractedResumeData.experiences.length - 1 ? '16px' : 0, borderBottom: i < extractedResumeData.experiences.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <strong style={{ color: 'var(--text-main)' }}>{exp.job_title} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>at</span> {exp.company_name}</strong>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: '10px' }}>{exp.start_date} - {exp.end_date || 'Present'}</span>
+                            </div>
+                            {exp.location && <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>📍 {exp.location}</p>}
+                            {exp.raw_description && (
+                              <div 
+                                style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}
+                                className="html-description"
+                                dangerouslySetInnerHTML={{ __html: exp.raw_description }}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {extractedResumeData.projects?.length > 0 && (
+                      <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--accent)', fontSize: '1rem' }}>Projects</h4>
+                        {extractedResumeData.projects.map((proj: any, i: number) => (
+                          <div key={i} style={{ marginBottom: i < extractedResumeData.projects.length - 1 ? '16px' : 0, paddingBottom: i < extractedResumeData.projects.length - 1 ? '16px' : 0, borderBottom: i < extractedResumeData.projects.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <strong style={{ color: 'var(--text-main)' }}>{proj.title}</strong>
+                            </div>
+                            {proj.tech_stack?.length > 0 && <p style={{ margin: '4px 0', fontSize: '0.8rem', color: 'var(--accent)' }}>{proj.tech_stack.join(", ")}</p>}
+                            {proj.raw_description && (
+                              <div 
+                                style={{ margin: '8px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.5 }}
+                                className="html-description"
+                                dangerouslySetInnerHTML={{ __html: proj.raw_description }}
+                              />
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {extractedResumeData.skills?.length > 0 && (
+                      <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--accent)', fontSize: '1rem' }}>Skills</h4>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                          {Object.entries(
+                            extractedResumeData.skills.reduce((acc: any, skill: any) => {
+                              if (typeof skill === 'string') {
+                                if (!acc['Other']) acc['Other'] = [];
+                                acc['Other'].push(skill);
+                                return acc;
+                              }
+                              const cat = skill.category || 'Other';
+                              if (!acc[cat]) acc[cat] = [];
+                              acc[cat].push(skill.skill_name);
+                              return acc;
+                            }, {})
+                          ).map(([category, skills]: [string, any], i: number) => (
+                            <div key={i}>
+                              <strong style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '6px' }}>{category}</strong>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                                {skills.map((s: string, j: number) => (
+                                  <span key={j} style={{ background: 'rgba(108,93,211,0.15)', padding: '4px 10px', borderRadius: '12px', fontSize: '0.85rem', color: 'var(--text-main)' }}>{s}</span>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {extractedResumeData.educations?.length > 0 && (
+                      <div style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.05)' }}>
+                        <h4 style={{ margin: '0 0 10px 0', color: 'var(--accent)', fontSize: '1rem' }}>Education</h4>
+                        {extractedResumeData.educations.map((edu: any, i: number) => (
+                          <div key={i} style={{ marginBottom: i < extractedResumeData.educations.length - 1 ? '16px' : 0, paddingBottom: i < extractedResumeData.educations.length - 1 ? '16px' : 0, borderBottom: i < extractedResumeData.educations.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                              <strong style={{ color: 'var(--text-main)' }}>{edu.degree} {edu.field_of_study ? `in ${edu.field_of_study}` : ''}</strong>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: '10px' }}>{edu.start_date} - {edu.end_date || 'Present'}</span>
+                            </div>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{edu.institution_name} {edu.location ? `• ${edu.location}` : ''}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

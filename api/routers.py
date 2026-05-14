@@ -76,7 +76,7 @@ async def add_experience(data: ExperienceSchema, user: User = Depends(get_curren
     db.add(new_exp)
     await db.commit()
     await db.refresh(new_exp)
-    return {"id": str(new_exp.id), **data.dict()}
+    return {**data.dict(), "id": str(new_exp.id)}
 
 @router.put("/experiences/{item_id}", response_model=ExperienceSchema)
 async def update_experience(item_id: str, data: ExperienceSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -94,7 +94,7 @@ async def update_experience(item_id: str, data: ExperienceSchema, user: User = D
     exp.raw_description = data.raw_description
     
     await db.commit()
-    return {"id": str(exp.id), **data.dict()}
+    return {**data.dict(), "id": str(exp.id)}
 
 @router.delete("/experiences/{item_id}")
 async def delete_experience(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -179,7 +179,7 @@ async def add_project(data: ProjectSchema, user: User = Depends(get_current_user
     db.add(new_proj)
     await db.commit()
     await db.refresh(new_proj)
-    return {"id": str(new_proj.id), **data.dict()}
+    return {**data.dict(), "id": str(new_proj.id)}
 
 @router.put("/projects/{item_id}", response_model=ProjectSchema)
 async def update_project(item_id: str, data: ProjectSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -196,7 +196,7 @@ async def update_project(item_id: str, data: ProjectSchema, user: User = Depends
     proj.raw_description = data.raw_description
     
     await db.commit()
-    return {"id": str(proj.id), **data.dict()}
+    return {**data.dict(), "id": str(proj.id)}
 
 @router.delete("/projects/{item_id}")
 async def delete_project(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -236,7 +236,7 @@ async def add_education(data: EducationSchema, user: User = Depends(get_current_
     db.add(new_edu)
     await db.commit()
     await db.refresh(new_edu)
-    return {"id": str(new_edu.id), **data.dict()}
+    return {**data.dict(), "id": str(new_edu.id)}
 
 @router.put("/educations/{item_id}", response_model=EducationSchema)
 async def update_education(item_id: str, data: EducationSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -252,7 +252,7 @@ async def update_education(item_id: str, data: EducationSchema, user: User = Dep
     edu.end_date = data.end_date
     
     await db.commit()
-    return {"id": str(edu.id), **data.dict()}
+    return {**data.dict(), "id": str(edu.id)}
 
 @router.delete("/educations/{item_id}")
 async def delete_education(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -292,7 +292,7 @@ async def add_social(data: SocialLinkSchema, user: User = Depends(get_current_us
     db.add(new_social)
     await db.commit()
     await db.refresh(new_social)
-    return {"id": str(new_social.id), **data.dict()}
+    return {**data.dict(), "id": str(new_social.id)}
 
 @router.put("/socials/{item_id}", response_model=SocialLinkSchema)
 async def update_social(item_id: str, data: SocialLinkSchema, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
@@ -308,7 +308,7 @@ async def update_social(item_id: str, data: SocialLinkSchema, user: User = Depen
     social.sort_order = data.sort_order
     
     await db.commit()
-    return {"id": str(social.id), **data.dict()}
+    return {**data.dict(), "id": str(social.id)}
 
 @router.delete("/socials/{item_id}")
 async def delete_social(item_id: str, user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
