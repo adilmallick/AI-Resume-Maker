@@ -5,7 +5,7 @@
 % License : MIT
 %------------------------
 
-\documentclass[letterpaper,11pt]{article}
+\documentclass[letterpaper,{{DOC_FONT_SIZE}}]{extarticle}
 
 \usepackage{latexsym}
 \usepackage[empty]{fullpage}
@@ -21,18 +21,8 @@
 \usepackage{fontawesome5}
 \input{glyphtounicode}
 
-
 %----------FONT OPTIONS----------
-% sans-serif
-% \usepackage[sfdefault]{FiraSans}
-% \usepackage[sfdefault]{roboto}
-% \usepackage[sfdefault]{noto-sans}
-% \usepackage[default]{sourcesanspro}
-
-% serif
-% \usepackage{CormorantGaramond}
-% \usepackage{charter}
-
+{{DOC_FONT_FAMILY}}
 
 \pagestyle{fancy}
 \fancyhf{} % clear all header and footer fields
@@ -112,14 +102,6 @@
     {{CANDIDATE_LOCATION}}{{SOCIAL_LINKS_BLOCK}}
 \end{center}
 
-{{SUMMARY_BLOCK}}
-
-{{EXPERIENCES_BLOCK}}
-
-{{EDUCATION_BLOCK}}
-
-{{SKILLS_BLOCK}}
-
-{{PROJECTS_BLOCK}}
+{{BODY_BLOCK}}
 
 \end{document}
