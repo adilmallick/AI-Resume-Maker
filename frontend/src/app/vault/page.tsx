@@ -112,6 +112,53 @@ export default function VaultPage() {
     dragOverItem.current = null;
   };
 
+  // Bullet Ordering Drag and Drop State
+  const [bulletDraggedItem, setBulletDraggedItem] = useState<{ type: 'exp' | 'proj', parentIdx: number, bulletIdx: number } | null>(null);
+  const [bulletDragOverItem, setBulletDragOverItem] = useState<{ type: 'exp' | 'proj', parentIdx: number, bulletIdx: number } | null>(null);
+  const [bulletDragEnabledId, setBulletDragEnabledId] = useState<string | null>(null);
+
+  const handleBulletDragStart = (e: React.DragEvent, type: 'exp' | 'proj', parentIdx: number, bulletIdx: number) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `${type}-${parentIdx}-${bulletIdx}`);
+    setBulletDraggedItem({ type, parentIdx, bulletIdx });
+  };
+
+  const handleBulletDragOver = (e: React.DragEvent, type: 'exp' | 'proj', parentIdx: number, bulletIdx: number) => {
+    e.preventDefault();
+    if (bulletDraggedItem && bulletDraggedItem.type === type && bulletDraggedItem.parentIdx === parentIdx) {
+      setBulletDragOverItem({ type, parentIdx, bulletIdx });
+    }
+  };
+
+  const handleBulletDrop = (e: React.DragEvent, type: 'exp' | 'proj', parentIdx: number, bulletIdx: number) => {
+    e.preventDefault();
+    if (bulletDraggedItem && bulletDraggedItem.type === type && bulletDraggedItem.parentIdx === parentIdx && bulletDraggedItem.bulletIdx !== bulletIdx) {
+      if (type === 'exp') {
+        const u = [...stagedExps];
+        const items = [...u[parentIdx].stagedBullets];
+        const [reorderedItem] = items.splice(bulletDraggedItem.bulletIdx, 1);
+        items.splice(bulletIdx, 0, reorderedItem);
+        u[parentIdx].stagedBullets = items;
+        setStagedExps(u);
+      } else {
+        const u = [...stagedProjs];
+        const items = [...u[parentIdx].stagedBullets];
+        const [reorderedItem] = items.splice(bulletDraggedItem.bulletIdx, 1);
+        items.splice(bulletIdx, 0, reorderedItem);
+        u[parentIdx].stagedBullets = items;
+        setStagedProjs(u);
+      }
+    }
+    setBulletDraggedItem(null);
+    setBulletDragOverItem(null);
+  };
+
+  const handleBulletDragEnd = () => {
+    setBulletDraggedItem(null);
+    setBulletDragOverItem(null);
+    setBulletDragEnabledId(null);
+  };
+
   const buildSnapshot = (profile: any, exps: any[], projs: any[], edus: any[], skills: any[], socials: any[], tconfig: any) =>
     JSON.stringify({ profile, exps, projs, edus, skills, socials, tconfig });
 
@@ -1807,8 +1854,30 @@ export default function VaultPage() {
                       <label style={labelStyle}>Bullet Points</label>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
                         {(exp.stagedBullets || []).map((b: string, bIdx: number) => (
-                          <div key={`b-${bIdx}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                            <span style={{ marginTop: '10px', color: 'var(--accent)', flexShrink: 0 }}>•</span>
+                          <div 
+                            key={`b-${bIdx}`} 
+                            draggable={bulletDragEnabledId === `exp-${idx}-${bIdx}`}
+                            onDragStart={(e) => handleBulletDragStart(e, 'exp', idx, bIdx)}
+                            onDragOver={(e) => handleBulletDragOver(e, 'exp', idx, bIdx)}
+                            onDrop={(e) => handleBulletDrop(e, 'exp', idx, bIdx)}
+                            onDragEnd={handleBulletDragEnd}
+                            style={{ 
+                              display: 'flex', gap: '8px', alignItems: 'flex-start',
+                              opacity: bulletDraggedItem?.type === 'exp' && bulletDraggedItem.parentIdx === idx && bulletDraggedItem.bulletIdx === bIdx ? 0.5 : 1,
+                              borderTop: bulletDragOverItem?.type === 'exp' && bulletDragOverItem.parentIdx === idx && bulletDragOverItem.bulletIdx === bIdx && bulletDraggedItem && bulletDraggedItem.bulletIdx > bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                              borderBottom: bulletDragOverItem?.type === 'exp' && bulletDragOverItem.parentIdx === idx && bulletDragOverItem.bulletIdx === bIdx && bulletDraggedItem && bulletDraggedItem.bulletIdx < bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                              padding: '2px 0',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <div 
+                              onMouseEnter={() => setBulletDragEnabledId(`exp-${idx}-${bIdx}`)}
+                              onMouseLeave={() => setBulletDragEnabledId(null)}
+                              style={{ marginTop: '10px', color: 'var(--text-muted)', cursor: 'grab', display: 'flex', alignItems: 'center' }} 
+                              title="Drag to reorder"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                            </div>
                             <div style={{ flex: 1 }}>
                               <RichTextEditor value={b} onChange={(val) => updateStagedExpBullet(idx, bIdx, val)} minHeight="46px" />
                             </div>
@@ -1835,8 +1904,30 @@ export default function VaultPage() {
                       <label style={labelStyle}>Bullet Points</label>
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
                         {(proj.stagedBullets || []).map((b: string, bIdx: number) => (
-                          <div key={`proj-b-${bIdx}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                            <span style={{ marginTop: '10px', color: 'var(--accent)', flexShrink: 0 }}>•</span>
+                          <div 
+                            key={`proj-b-${bIdx}`} 
+                            draggable={bulletDragEnabledId === `proj-${idx}-${bIdx}`}
+                            onDragStart={(e) => handleBulletDragStart(e, 'proj', idx, bIdx)}
+                            onDragOver={(e) => handleBulletDragOver(e, 'proj', idx, bIdx)}
+                            onDrop={(e) => handleBulletDrop(e, 'proj', idx, bIdx)}
+                            onDragEnd={handleBulletDragEnd}
+                            style={{ 
+                              display: 'flex', gap: '8px', alignItems: 'flex-start',
+                              opacity: bulletDraggedItem?.type === 'proj' && bulletDraggedItem.parentIdx === idx && bulletDraggedItem.bulletIdx === bIdx ? 0.5 : 1,
+                              borderTop: bulletDragOverItem?.type === 'proj' && bulletDragOverItem.parentIdx === idx && bulletDragOverItem.bulletIdx === bIdx && bulletDraggedItem && bulletDraggedItem.bulletIdx > bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                              borderBottom: bulletDragOverItem?.type === 'proj' && bulletDragOverItem.parentIdx === idx && bulletDragOverItem.bulletIdx === bIdx && bulletDraggedItem && bulletDraggedItem.bulletIdx < bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                              padding: '2px 0',
+                              transition: 'all 0.2s ease'
+                            }}
+                          >
+                            <div 
+                              onMouseEnter={() => setBulletDragEnabledId(`proj-${idx}-${bIdx}`)}
+                              onMouseLeave={() => setBulletDragEnabledId(null)}
+                              style={{ marginTop: '10px', color: 'var(--text-muted)', cursor: 'grab', display: 'flex', alignItems: 'center' }} 
+                              title="Drag to reorder"
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                            </div>
                             <div style={{ flex: 1 }}>
                               <RichTextEditor value={b} onChange={(val) => updateStagedProjBullet(idx, bIdx, val)} minHeight="46px" />
                             </div>
