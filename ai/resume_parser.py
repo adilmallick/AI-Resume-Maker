@@ -62,6 +62,13 @@ def _build_extraction_prompt(text: str) -> str:
 If any field is missing from the resume, leave it as null or empty.
 Make sure the output strictly follows the JSON schema provided below.
 
+CRITICAL FORMATTING RULES:
+- For "raw_description" fields in experiences and projects, you MUST format the content as an HTML unordered list.
+  Example: "<ul><li>Developed REST API using FastAPI</li><li>Reduced latency by 40%</li></ul>"
+- Each bullet point should be a separate <li> item.
+- Do NOT return plain text or numbered lists for raw_description — always use <ul><li>...</li></ul>.
+- If there are no bullet points or description, set raw_description to null.
+
 {format_instructions}
 
 Resume Text:

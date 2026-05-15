@@ -7,6 +7,7 @@ import RichTextEditor from '@/components/RichTextEditor';
 import Modal from '@/components/Modal';
 import LaTeXEditor from '@/components/LaTeXEditor';
 import { ATSResult } from '@/types/ats';
+import { formatDateRange } from '@/lib/dateUtils';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
@@ -1196,7 +1197,7 @@ export default function VaultPage() {
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                       <h3 style={{ fontSize: '1.2rem', color: 'var(--text-main)' }}>{exp.job_title} <span style={{ color: 'var(--accent-light)', fontWeight: 400 }}>@ {exp.company_name}</span></h3>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span className="badge">{exp.start_date} - {exp.end_date || 'Present'}</span>
+                        <span className="badge">{formatDateRange(exp.start_date, exp.end_date)}</span>
                         <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => handleEditExp(exp)}>Edit</button>
                         <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--error)', borderColor: 'var(--error)' }} onClick={() => handleDeleteExp(exp.id)}>Delete</button>
                       </div>
@@ -1314,7 +1315,7 @@ export default function VaultPage() {
                         <p style={{ color: 'var(--accent-light)', margin: 0, fontSize: '0.9rem' }}>{edu.institution}</p>
                       </div>
                       <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <span className="badge">{edu.start_date} - {edu.end_date || 'Present'}</span>
+                        <span className="badge">{formatDateRange(edu.start_date, edu.end_date)}</span>
                         <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => handleEditEdu(edu)}>Edit</button>
                         <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--error)', borderColor: 'var(--error)' }} onClick={() => handleDeleteEdu(edu.id)}>Delete</button>
                       </div>
@@ -2041,7 +2042,7 @@ export default function VaultPage() {
                           <div key={i} style={{ marginBottom: i < extractedResumeData.experiences.length - 1 ? '16px' : 0, paddingBottom: i < extractedResumeData.experiences.length - 1 ? '16px' : 0, borderBottom: i < extractedResumeData.experiences.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <strong style={{ color: 'var(--text-main)' }}>{exp.job_title} <span style={{ color: 'var(--text-muted)', fontWeight: 400 }}>at</span> {exp.company_name}</strong>
-                              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: '10px' }}>{exp.start_date} - {exp.end_date || 'Present'}</span>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: '10px' }}>{formatDateRange(exp.start_date, exp.end_date)}</span>
                             </div>
                             {exp.location && <p style={{ margin: '2px 0 0 0', fontSize: '0.8rem', color: 'var(--text-muted)' }}>📍 {exp.location}</p>}
                             {exp.raw_description && (
@@ -2114,7 +2115,7 @@ export default function VaultPage() {
                           <div key={i} style={{ marginBottom: i < extractedResumeData.educations.length - 1 ? '16px' : 0, paddingBottom: i < extractedResumeData.educations.length - 1 ? '16px' : 0, borderBottom: i < extractedResumeData.educations.length - 1 ? '1px solid rgba(255,255,255,0.05)' : 'none' }}>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                               <strong style={{ color: 'var(--text-main)' }}>{edu.degree} {edu.field_of_study ? `in ${edu.field_of_study}` : ''}</strong>
-                              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: '10px' }}>{edu.start_date} - {edu.end_date || 'Present'}</span>
+                              <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: '10px' }}>{formatDateRange(edu.start_date, edu.end_date)}</span>
                             </div>
                             <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{edu.institution} {edu.location ? `• ${edu.location}` : ''}</p>
                           </div>
