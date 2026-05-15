@@ -187,6 +187,16 @@ def _generate_with_llm(page_content: str) -> str:
         logger.info("Extracting job info using Ollama (gemma2:9b)...")
         return GemmaOllamaProvider().generate(formatted_prompt)
         
+    elif provider_name == "gemini":
+        from ai.llm.gemini_provider import GeminiProvider
+        logger.info("Extracting job info using Gemini...")
+        return GeminiProvider().generate(formatted_prompt)
+        
+    elif provider_name == "anthropic":
+        from ai.llm.anthropic_provider import AnthropicProvider
+        logger.info("Extracting job info using Anthropic...")
+        return AnthropicProvider(model="claude-3-5-sonnet-20241022").generate(formatted_prompt)
+        
     else:
         # Default to local Ollama Llama 3.1
         from langchain_ollama import OllamaLLM

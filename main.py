@@ -6,6 +6,9 @@ from scraper.extractor import extract_job_info, extract_from_text
 import logging
 import asyncio
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -53,10 +56,22 @@ class ScrapeResponse(BaseModel):
 
 @app.get("/health")
 async def health():
+    provider = os.getenv("LLM_PROVIDER", "ollama").lower()
+    if provider == "groq":
+        model = "llama-3.1-8b-instant"
+    elif provider == "gemma_ollama":
+        model = "gemma2:9b"
+    elif provider == "gemini":
+        model = "gemini-3.1-pro"
+    elif provider == "anthropic":
+        model = "claude-4-sonnet"
+    else:
+        model = "llama3.1:8b"
+        
     return {
         "status": "ok",
-        "provider": os.getenv("LLM_PROVIDER", "ollama"),
-        "model": "llama-3.1-8b-instant" if os.getenv("LLM_PROVIDER", "ollama") == "groq" else "llama3.1:8b",
+        "provider": provider,
+        "model": model,
     }
 
 
@@ -98,7 +113,8 @@ from ai.pipeline import ResumePipeline
 #   LLM_PROVIDER=ollama        → OllamaProvider  (llama3.1:8b, default)
 #   LLM_PROVIDER=gemma_ollama  → GemmaOllamaProvider (gemma2:9b via Ollama)
 #   LLM_PROVIDER=groq          → LlamaGroqProvider   (llama-3.1-8b-instant via Groq API)
-#                                 also requires: GROQ_API_KEY=your_key
+#   LLM_PROVIDER=gemini        → GeminiProvider      (gemini-3-flash-preview)
+#   LLM_PROVIDER=anthropic     → AnthropicProvider   (claude-4-sonnet)
 #
 _provider_name = os.getenv("LLM_PROVIDER", "ollama").lower()
 
@@ -108,6 +124,14 @@ if _provider_name == "groq":
 elif _provider_name == "gemma_ollama":
     llm_provider = GemmaOllamaProvider()
     logger.info("LLM Provider: Ollama (gemma2:9b)")
+elif _provider_name == "gemini":
+    from ai.llm.gemini_provider import GeminiProvider
+    llm_provider = GeminiProvider(model="gemini-3-flash-preview")
+    logger.info("LLM Provider: Gemini (gemini-3-flash-preview)")
+elif _provider_name == "anthropic":
+    from ai.llm.anthropic_provider import AnthropicProvider
+    llm_provider = AnthropicProvider(model="claude-3-5-sonnet-20241022")
+    logger.info("LLM Provider: Anthropic (claude-3-5-sonnet-20241022)")
 else:
     llm_provider = OllamaProvider(model="llama3.1:8b")
     logger.info("LLM Provider: Ollama (llama3.1:8b)")
