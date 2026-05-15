@@ -36,7 +36,8 @@ ALLOWED_PLACEHOLDERS: frozenset[str] = frozenset(
         "SOCIAL_LINKS_BLOCK",
         "BODY_BLOCK",
         "DOC_FONT_SIZE",
-        "DOC_FONT_FAMILY"
+        "DOC_FONT_FAMILY",
+        "DOC_HEADING_FORMAT"
     }
 )
 
