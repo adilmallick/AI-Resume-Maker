@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import Modal from '@/components/Modal';
 import RichTextEditor from '@/components/RichTextEditor';
+import { formatDateRange } from '@/lib/dateUtils';
 
 interface ExperienceSectionProps {
   experiences: any[];
@@ -69,7 +70,7 @@ export default function ExperienceSection({ experiences, onSave, onDelete }: Exp
                 {exp.job_title} <span style={{ color: 'var(--accent-light)', fontWeight: 400 }}>@ {exp.company_name}</span>
               </h3>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span className="badge">{exp.start_date} - {exp.end_date || 'Present'}</span>
+                <span className="badge">{formatDateRange(exp.start_date, exp.end_date)}</span>
                 <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => openEdit(exp)}>Edit</button>
                 <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--error)', borderColor: 'var(--error)' }} onClick={() => onDelete(exp.id)}>Delete</button>
               </div>

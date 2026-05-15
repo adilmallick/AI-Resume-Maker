@@ -24,34 +24,61 @@ def parse_date(date_str: str) -> Optional[date]:
 
     Handles ISO formats (YYYY-MM-DD, YYYY-MM, YYYY) as well as human-readable
     formats returned by the LLM such as 'Aug 2023', 'August 2023',
-    'Aug, 2023', 'August, 2023', 'Present', and 'Current'.
+    'Aug. 2023', '08/2023', 'Present', 'Current', etc.
+    Day is always set to 1 when only month+year are available.
     """
     if not date_str:
         return None
     date_str = date_str.strip()
 
+    logger.info("parse_date: parsing %r", date_str)
+
     # Treat "Present" / "Current" / "Now" as no end date
-    if date_str.lower() in ("present", "current", "now", "ongoing"):
+    if date_str.lower() in ("present", "current", "now", "ongoing", "till date", "till now"):
         return None
 
-    # --- ISO / numeric formats ---
+    # --- ISO / numeric formats (each in its own try so one failure doesn't skip the rest) ---
+    # YYYY-MM-DD
     try:
         if len(date_str) >= 10:
             return datetime.strptime(date_str[:10], "%Y-%m-%d").date()
-        if len(date_str) >= 7:
+    except ValueError:
+        pass
+
+    # YYYY-MM
+    try:
+        if len(date_str) >= 7 and date_str[4] == '-':
             return datetime.strptime(date_str[:7], "%Y-%m").date()
-        if len(date_str) == 4:
+    except ValueError:
+        pass
+
+    # YYYY only
+    try:
+        if len(date_str) == 4 and date_str.isdigit():
             return datetime.strptime(date_str, "%Y").date()
     except ValueError:
         pass
 
+    # MM/YYYY or YYYY/MM (slash-separated)
+    for fmt in ("%m/%Y", "%Y/%m"):
+        try:
+            return datetime.strptime(date_str, fmt).date()
+        except ValueError:
+            continue
+
     # --- Human-readable formats (LLM output) ---
-    # Normalise: remove commas ("Aug, 2023" → "Aug 2023")
-    normalised = date_str.replace(",", "").strip()
+    # Normalise: remove commas and periods from abbreviated months
+    # "Aug, 2023" → "Aug 2023",  "Aug. 2023" → "Aug 2023"
+    normalised = date_str.replace(",", "").replace(".", "").strip()
+    # Collapse multiple spaces
+    normalised = " ".join(normalised.split())
+
     for fmt in ("%b %Y", "%B %Y"):   # abbreviated / full month name
         try:
-            # strptime sets day=1 automatically for month-only formats
-            return datetime.strptime(normalised, fmt).date()
+            # strptime defaults day to 1 for month-only formats
+            parsed = datetime.strptime(normalised, fmt).date()
+            logger.info("parse_date: successfully parsed %r → %s", date_str, parsed)
+            return parsed
         except ValueError:
             continue
 

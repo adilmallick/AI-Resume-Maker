@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import Modal from '@/components/Modal';
+import { formatDateRange } from '@/lib/dateUtils';
 
 interface EducationSectionProps {
   educations: any[];
@@ -64,7 +65,7 @@ export default function EducationSection({ educations, onSave, onDelete }: Educa
                 <p style={{ color: 'var(--accent-light)', margin: 0, fontSize: '0.9rem' }}>{edu.institution}</p>
               </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <span className="badge">{edu.start_date} - {edu.end_date || 'Present'}</span>
+                <span className="badge">{formatDateRange(edu.start_date, edu.end_date)}</span>
                 <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem' }} onClick={() => openEdit(edu)}>Edit</button>
                 <button className="btn btn-secondary" style={{ padding: '2px 8px', fontSize: '0.75rem', color: 'var(--error)', borderColor: 'var(--error)' }} onClick={() => onDelete(edu.id)}>Delete</button>
               </div>
