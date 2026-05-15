@@ -52,6 +52,9 @@ export default function ReviewWorkspace({
   const [openTitleIdx, setOpenTitleIdx] = useState<number | null>(null);
   const atsSnapshot = useRef<string>('');
   const atsInitialized = useRef(false);
+  const [draggedItem, setDraggedItem] = useState<{ type: 'exp' | 'proj', parentIdx: number, bulletIdx: number } | null>(null);
+  const [dragOverItem, setDragOverItem] = useState<{ type: 'exp' | 'proj', parentIdx: number, bulletIdx: number } | null>(null);
+  const [dragEnabledId, setDragEnabledId] = useState<string | null>(null);
 
   // Build a snapshot of data that affects ATS score (skills, exp bullets, proj bullets, summary)
   const buildAtsSnapshot = () => JSON.stringify({
@@ -126,6 +129,48 @@ export default function ReviewWorkspace({
   };
   const updateStagedProjBullet = (projIdx: number, bulletIdx: number, val: string) => {
     const updated = [...stagedProjs]; updated[projIdx].stagedBullets[bulletIdx] = val; setStagedProjs(updated);
+  };
+
+  const handleDragStart = (e: React.DragEvent, type: 'exp' | 'proj', parentIdx: number, bulletIdx: number) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', `${type}-${parentIdx}-${bulletIdx}`);
+    setDraggedItem({ type, parentIdx, bulletIdx });
+  };
+
+  const handleDragOver = (e: React.DragEvent, type: 'exp' | 'proj', parentIdx: number, bulletIdx: number) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.type === type && draggedItem.parentIdx === parentIdx) {
+      setDragOverItem({ type, parentIdx, bulletIdx });
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent, type: 'exp' | 'proj', parentIdx: number, bulletIdx: number) => {
+    e.preventDefault();
+    if (draggedItem && draggedItem.type === type && draggedItem.parentIdx === parentIdx && draggedItem.bulletIdx !== bulletIdx) {
+      if (type === 'exp') {
+        const u = [...stagedExps];
+        const items = [...u[parentIdx].stagedBullets];
+        const [reorderedItem] = items.splice(draggedItem.bulletIdx, 1);
+        items.splice(bulletIdx, 0, reorderedItem);
+        u[parentIdx].stagedBullets = items;
+        setStagedExps(u);
+      } else {
+        const u = [...stagedProjs];
+        const items = [...u[parentIdx].stagedBullets];
+        const [reorderedItem] = items.splice(draggedItem.bulletIdx, 1);
+        items.splice(bulletIdx, 0, reorderedItem);
+        u[parentIdx].stagedBullets = items;
+        setStagedProjs(u);
+      }
+    }
+    setDraggedItem(null);
+    setDragOverItem(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedItem(null);
+    setDragOverItem(null);
+    setDragEnabledId(null);
   };
 
   return (
@@ -430,8 +475,30 @@ export default function ReviewWorkspace({
               <label style={labelStyle}>Bullet Points</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
                 {(exp.stagedBullets || []).map((b: string, bIdx: number) => (
-                  <div key={`b-${bIdx}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                    <span style={{ marginTop: '10px', color: 'var(--accent)', flexShrink: 0 }}>•</span>
+                  <div 
+                    key={`b-${bIdx}`} 
+                    draggable={dragEnabledId === `exp-${idx}-${bIdx}`}
+                    onDragStart={(e) => handleDragStart(e, 'exp', idx, bIdx)}
+                    onDragOver={(e) => handleDragOver(e, 'exp', idx, bIdx)}
+                    onDrop={(e) => handleDrop(e, 'exp', idx, bIdx)}
+                    onDragEnd={handleDragEnd}
+                    style={{ 
+                      display: 'flex', gap: '8px', alignItems: 'flex-start',
+                      opacity: draggedItem?.type === 'exp' && draggedItem.parentIdx === idx && draggedItem.bulletIdx === bIdx ? 0.5 : 1,
+                      borderTop: dragOverItem?.type === 'exp' && dragOverItem.parentIdx === idx && dragOverItem.bulletIdx === bIdx && draggedItem && draggedItem.bulletIdx > bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                      borderBottom: dragOverItem?.type === 'exp' && dragOverItem.parentIdx === idx && dragOverItem.bulletIdx === bIdx && draggedItem && draggedItem.bulletIdx < bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                      padding: '2px 0',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div 
+                      onMouseEnter={() => setDragEnabledId(`exp-${idx}-${bIdx}`)}
+                      onMouseLeave={() => setDragEnabledId(null)}
+                      style={{ marginTop: '10px', color: 'var(--text-muted)', cursor: 'grab', display: 'flex', alignItems: 'center' }} 
+                      title="Drag to reorder"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                    </div>
                     <div style={{ flex: 1 }}><RichTextEditor value={b} onChange={val => updateStagedExpBullet(idx, bIdx, val)} minHeight="46px" /></div>
                     <button style={{ ...removeBtn, marginTop: '8px', flexShrink: 0 }} onClick={() => { const u = [...stagedExps]; u[idx].stagedBullets.splice(bIdx, 1); setStagedExps(u); }}>✕</button>
                   </div>
@@ -456,8 +523,30 @@ export default function ReviewWorkspace({
               <label style={labelStyle}>Bullet Points</label>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginTop: '6px' }}>
                 {(proj.stagedBullets || []).map((b: string, bIdx: number) => (
-                  <div key={`proj-b-${bIdx}`} style={{ display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
-                    <span style={{ marginTop: '10px', color: 'var(--accent)', flexShrink: 0 }}>•</span>
+                  <div 
+                    key={`proj-b-${bIdx}`} 
+                    draggable={dragEnabledId === `proj-${idx}-${bIdx}`}
+                    onDragStart={(e) => handleDragStart(e, 'proj', idx, bIdx)}
+                    onDragOver={(e) => handleDragOver(e, 'proj', idx, bIdx)}
+                    onDrop={(e) => handleDrop(e, 'proj', idx, bIdx)}
+                    onDragEnd={handleDragEnd}
+                    style={{ 
+                      display: 'flex', gap: '8px', alignItems: 'flex-start',
+                      opacity: draggedItem?.type === 'proj' && draggedItem.parentIdx === idx && draggedItem.bulletIdx === bIdx ? 0.5 : 1,
+                      borderTop: dragOverItem?.type === 'proj' && dragOverItem.parentIdx === idx && dragOverItem.bulletIdx === bIdx && draggedItem && draggedItem.bulletIdx > bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                      borderBottom: dragOverItem?.type === 'proj' && dragOverItem.parentIdx === idx && dragOverItem.bulletIdx === bIdx && draggedItem && draggedItem.bulletIdx < bIdx ? '2px solid var(--accent)' : '2px solid transparent',
+                      padding: '2px 0',
+                      transition: 'all 0.2s ease'
+                    }}
+                  >
+                    <div 
+                      onMouseEnter={() => setDragEnabledId(`proj-${idx}-${bIdx}`)}
+                      onMouseLeave={() => setDragEnabledId(null)}
+                      style={{ marginTop: '10px', color: 'var(--text-muted)', cursor: 'grab', display: 'flex', alignItems: 'center' }} 
+                      title="Drag to reorder"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="12" r="1"></circle><circle cx="9" cy="5" r="1"></circle><circle cx="9" cy="19" r="1"></circle><circle cx="15" cy="12" r="1"></circle><circle cx="15" cy="5" r="1"></circle><circle cx="15" cy="19" r="1"></circle></svg>
+                    </div>
                     <div style={{ flex: 1 }}><RichTextEditor value={b} onChange={val => updateStagedProjBullet(idx, bIdx, val)} minHeight="46px" /></div>
                     <button style={{ ...removeBtn, marginTop: '8px', flexShrink: 0 }} onClick={() => { const u = [...stagedProjs]; u[idx].stagedBullets.splice(bIdx, 1); setStagedProjs(u); }}>✕</button>
                   </div>
