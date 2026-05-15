@@ -2116,7 +2116,7 @@ export default function VaultPage() {
                               <strong style={{ color: 'var(--text-main)' }}>{edu.degree} {edu.field_of_study ? `in ${edu.field_of_study}` : ''}</strong>
                               <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', marginLeft: '10px' }}>{edu.start_date} - {edu.end_date || 'Present'}</span>
                             </div>
-                            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{edu.institution_name} {edu.location ? `• ${edu.location}` : ''}</p>
+                            <p style={{ margin: '4px 0 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>{edu.institution} {edu.location ? `• ${edu.location}` : ''}</p>
                           </div>
                         ))}
                       </div>
