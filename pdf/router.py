@@ -181,10 +181,13 @@ def build_latex_source(request: ResumePDFRequest) -> str:
     f_fam = request.template_config.font_family
     if f_fam == "serif":
         font_pkg = "\\renewcommand{\\familydefault}{\\rmdefault}"
+        heading_fmt = "\\scshape"
     elif f_fam == "monospace":
         font_pkg = "\\renewcommand{\\familydefault}{\\ttdefault}"
+        heading_fmt = "\\bfseries"
     else:
         font_pkg = "\\renewcommand{\\familydefault}{\\sfdefault}"
+        heading_fmt = "\\bfseries"
 
     blocks = {
         "summary": summary_block,
@@ -205,6 +208,7 @@ def build_latex_source(request: ResumePDFRequest) -> str:
         "BODY_BLOCK":         body_block,
         "DOC_FONT_SIZE":      sanitize(request.template_config.font_size),
         "DOC_FONT_FAMILY":    font_pkg,
+        "DOC_HEADING_FORMAT": heading_fmt,
     }
 
     # ── 2. Render template ─────────────────────────────────────────────────
