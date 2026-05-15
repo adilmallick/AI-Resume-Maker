@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -9,7 +10,25 @@ export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [impersonating, setImpersonating] = useState(false);
   const { login } = useAuth();
+  const searchParams = useSearchParams();
+
+  // ── Admin impersonation: auto-login via token passed in URL ──────────────
+  useEffect(() => {
+    const impToken = searchParams.get('impersonate_token');
+    const impUser  = searchParams.get('impersonate_user');
+    if (!impToken || !impUser) return;
+
+    setImpersonating(true);
+    try {
+      const userData = JSON.parse(decodeURIComponent(impUser));
+      login(decodeURIComponent(impToken), userData);
+    } catch (e) {
+      setError('Impersonation failed — invalid token data.');
+      setImpersonating(false);
+    }
+  }, [searchParams]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -42,6 +61,19 @@ export default function LoginPage() {
       setError(err.message);
     }
   };
+
+  // Show a loading state while impersonation is in progress
+  if (impersonating) {
+    return (
+      <div className="auth-wrapper">
+        <div className="glass-panel" style={{ width: '100%', maxWidth: '440px', textAlign: 'center' }}>
+          <p style={{ fontSize: '2rem', marginBottom: '12px' }}>⚡</p>
+          <h1 className="title-main" style={{ fontSize: '1.6rem', marginBottom: '10px' }}>Signing in…</h1>
+          <p className="title-sub">Admin impersonation in progress.</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="auth-wrapper">

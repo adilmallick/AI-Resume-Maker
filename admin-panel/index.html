@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Career Vault — Admin Panel</title>
+  <meta name="description"
+    content="Career Vault internal admin dashboard for monitoring users, AI usage, and application data." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- ── LOGIN SCREEN ─────────────────────────────────────────────────────────── -->
+  <div id="login-screen" class="screen active">
+    <div class="login-bg">
+      <div class="login-glow"></div>
+      <div class="login-card">
+        <div class="login-logo">
+          <span class="logo-icon">⚡</span>
+          <span class="logo-text">Career Vault</span>
+          <span class="logo-badge">Admin</span>
+        </div>
+        <h1 class="login-title">Admin Panel</h1>
+        <p class="login-sub">Secure internal access only</p>
+
+        <div class="form-group">
+          <label for="api-url">API Base URL</label>
+          <input id="api-url" type="url" value="http://localhost:8000" placeholder="http://localhost:8000" />
+        </div>
+        <div class="form-group">
+          <label for="admin-secret">Admin Secret</label>
+          <input id="admin-secret" type="password" placeholder="Enter admin secret" />
+        </div>
+        <button id="login-btn" class="btn btn-primary btn-full" onclick="doLogin()">
+          <span class="btn-text">Authenticate</span>
+          <span class="btn-spinner hidden" id="login-spinner">⟳</span>
+        </button>
+        <p id="login-error" class="error-msg hidden"></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MAIN APP ──────────────────────────────────────────────────────────────── -->
+  <div id="app-screen" class="screen">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <span class="logo-icon">⚡</span>
+        <div>
+          <div class="sidebar-title">Career Vault</div>
+          <div class="sidebar-badge">Admin Panel</div>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item active" id="nav-dashboard" onclick="showSection('dashboard')">
+          <span class="nav-icon">📊</span> Dashboard
+        </button>
+        <button class="nav-item" id="nav-users" onclick="showSection('users')">
+          <span class="nav-icon">👥</span> Users
+        </button>
+        <button class="nav-item" id="nav-settings" onclick="showSection('settings')">
+          <span class="nav-icon">⚙️</span> Settings
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="connection-status">
+          <span class="status-dot" id="status-dot"></span>
+          <span id="status-text">Connected</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="doLogout()">Sign out</button>
+      </div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main-content">
+      <!-- Top bar -->
+      <header class="topbar">
+        <div class="topbar-left">
+          <h2 id="page-title">Dashboard</h2>
+          <span class="topbar-sub" id="page-sub">Platform overview</span>
+        </div>
+        <div class="topbar-right">
+          <button class="btn btn-ghost btn-sm" onclick="refreshAll()" id="refresh-btn">↺ Refresh</button>
+          <div class="topbar-api-badge" id="topbar-api"></div>
+        </div>
+      </header>
+
+      <!-- Dashboard section -->
+      <section id="section-dashboard" class="content-section active">
+        <div class="stats-grid" id="stats-grid">
+          <!-- Populated by JS -->
+        </div>
+
+        <div class="section-grid-2">
+          <div class="card">
+            <div class="card-header">
+              <h3>Recent Users</h3>
+              <button class="btn btn-ghost btn-xs" onclick="showSection('users')">View all →</button>
+            </div>
+            <div id="recent-users-list" class="list-items"></div>
+          </div>
+          <div class="card">
+            <div class="card-header">
+              <h3>System Health</h3>
+              <button class="btn btn-ghost btn-xs" onclick="checkHealth()">Check →</button>
+            </div>
+            <div id="health-info" class="health-info">
+              <p class="muted">Click "Check" to ping the API.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Users section -->
+      <section id="section-users" class="content-section">
+        <div class="users-toolbar">
+          <input id="user-search" type="search" placeholder="🔍  Search by name or email…" oninput="filterUsers()" />
+          <div class="filter-tabs">
+            <button class="filter-tab active" id="filter-all" onclick="setFilter('all')">All</button>
+            <button class="filter-tab" id="filter-active" onclick="setFilter('active')">Active</button>
+            <button class="filter-tab" id="filter-inactive" onclick="setFilter('inactive')">Inactive</button>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table" id="users-table">
+            <thead>
+              <tr>
+                <th>User</th>
+                <th>Status</th>
+                <th>Joined</th>
+                <th>AI Credits</th>
+                <th>Experiences</th>
+                <th>Projects</th>
+                <th>Applications</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+          <div id="users-loading" class="table-loading">
+            <div class="spinner"></div>
+            <span>Loading users…</span>
+          </div>
+          <div id="users-empty" class="table-empty hidden">No users match your filter.</div>
+        </div>
+      </section>
+      <!-- Settings section -->
+      <section id="section-settings" class="content-section">
+        <div class="settings-header">
+          <h3>LLM Provider</h3>
+          <p class="muted">Switch the AI model used for resume generation. Changes are applied immediately and saved to
+            .env.</p>
+        </div>
+
+        <div id="provider-cards" class="provider-grid">
+          <!-- Populated by JS -->
+          <div class="table-loading">
+            <div class="spinner"></div><span>Loading providers…</span>
+          </div>
+        </div>
+
+        <!-- API Key input (shown only when needed) -->
+        <div id="api-key-section" class="api-key-section hidden">
+          <div class="card">
+            <div class="card-header">
+              <h3 id="api-key-label">API Key</h3>
+              <span id="api-key-hint" class="muted"></span>
+            </div>
+            <div class="api-key-row">
+              <input id="api-key-input" type="password" placeholder="Paste your API key here…" />
+              <button class="btn btn-primary" onclick="applyProvider()">Apply &amp; Switch</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="provider-apply-row" class="provider-apply-row hidden">
+          <button class="btn btn-primary" id="apply-btn" onclick="applyProvider()">
+            ✓ Switch Provider
+          </button>
+          <span id="apply-status" class="muted"></span>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ── USER DETAIL MODAL ─────────────────────────────────────────────────────── -->
+  <div id="user-modal" class="modal-backdrop hidden" onclick="closeModalIfBg(event)">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div>
+          <h2 id="modal-name">User Details</h2>
+          <p id="modal-email" class="muted"></p>
+        </div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Profile card -->
+        <div class="detail-grid">
+          <div class="detail-card">
+            <div class="detail-label">Account Status</div>
+            <div id="modal-status" class="status-badge"></div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">Joined</div>
+            <div id="modal-joined" class="detail-value"></div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">Location</div>
+            <div id="modal-location" class="detail-value"></div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">Phone</div>
+            <div id="modal-phone" class="detail-value"></div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">AI Credits</div>
+            <div class="credit-row">
+              <input id="modal-credits-input" type="number" min="0" max="9999" class="credit-input" />
+              <button class="btn btn-xs btn-secondary" onclick="saveCredits()">Save</button>
+            </div>
+          </div>
+          <div class="detail-card">
+            <div class="detail-label">Template</div>
+            <div id="modal-template" class="detail-value"></div>
+          </div>
+        </div>
+
+        <!-- Summary -->
+        <div class="detail-section">
+          <div class="detail-label">Profile Summary</div>
+          <div id="modal-summary" class="summary-text muted"></div>
+        </div>
+
+        <!-- Counts row -->
+        <div class="counts-row">
+          <div class="count-chip"><span id="mc-exp">—</span><small>Experiences</small></div>
+          <div class="count-chip"><span id="mc-proj">—</span><small>Projects</small></div>
+          <div class="count-chip"><span id="mc-skill">—</span><small>Skills</small></div>
+          <div class="count-chip"><span id="mc-apps">—</span><small>Applications</small></div>
+        </div>
+
+        <!-- Applications -->
+        <div class="detail-section">
+          <div class="detail-label">Job Applications</div>
+          <div id="modal-apps-list" class="apps-list">
+            <div class="muted">Loading…</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button class="btn btn-accent" onclick="loginAsUser()">⚡ Login as User</button>
+        <button id="modal-toggle-btn" class="btn btn-secondary" onclick="toggleUserFromModal()">Deactivate</button>
+        <button class="btn btn-danger" onclick="deleteUserFromModal()">Delete User</button>
+        <button class="btn btn-ghost" onclick="closeModal()">Close</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── TOAST ─────────────────────────────────────────────────────────────────── -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+
+</html>
