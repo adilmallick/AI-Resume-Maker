@@ -20,9 +20,21 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/vault/resume", tags=["vault", "resume"])
 
 def parse_date(date_str: str) -> Optional[date]:
+    """Parse a date string from various formats into a Python date object.
+
+    Handles ISO formats (YYYY-MM-DD, YYYY-MM, YYYY) as well as human-readable
+    formats returned by the LLM such as 'Aug 2023', 'August 2023',
+    'Aug, 2023', 'August, 2023', 'Present', and 'Current'.
+    """
     if not date_str:
         return None
     date_str = date_str.strip()
+
+    # Treat "Present" / "Current" / "Now" as no end date
+    if date_str.lower() in ("present", "current", "now", "ongoing"):
+        return None
+
+    # --- ISO / numeric formats ---
     try:
         if len(date_str) >= 10:
             return datetime.strptime(date_str[:10], "%Y-%m-%d").date()
@@ -32,8 +44,20 @@ def parse_date(date_str: str) -> Optional[date]:
             return datetime.strptime(date_str, "%Y").date()
     except ValueError:
         pass
-    
-    return date.today() # fallback to avoid DB null constraint errors
+
+    # --- Human-readable formats (LLM output) ---
+    # Normalise: remove commas ("Aug, 2023" → "Aug 2023")
+    normalised = date_str.replace(",", "").strip()
+    for fmt in ("%b %Y", "%B %Y"):   # abbreviated / full month name
+        try:
+            # strptime sets day=1 automatically for month-only formats
+            return datetime.strptime(normalised, fmt).date()
+        except ValueError:
+            continue
+
+    # If nothing matched, log a warning and return None (safer than today())
+    logger.warning("parse_date: could not parse %r — returning None", date_str)
+    return None
 
 def extract_text_from_file(file: UploadFile, content: bytes) -> str:
     ext = os.path.splitext(file.filename)[1].lower()
