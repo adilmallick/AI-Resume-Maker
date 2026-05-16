@@ -105,46 +105,30 @@
 
       try {
         /**
-         * Strategy: open a tiny hidden iframe pointing at the main app's origin,
-         * postMessage the credentials, let the app set localStorage, then redirect.
+         * Universal redirect strategy:
+         * Always use the /login?impersonate_token=... URL approach.
          *
-         * BUT — localStorage is same-origin only.
-         * Since this page is served from a different origin (admin-panel port),
-         * we use window.open + postMessage approach OR we redirect with hash params
-         * and let the main app handle them.
+         * NOTE: localStorage.setItem() does NOT throw cross-origin — it silently
+         * writes to the *current* page's storage, not the target app's storage.
+         * The old same-origin fast-path was a false-positive that always fired,
+         * redirecting to the backend URL instead of the real frontend.
          *
-         * Simpler path: directly navigate to the main app with hash params.
-         * The main app login page reads them and sets localStorage.
-         * (Supported via the ?impersonate param we handle below in the redirect URL)
-         *
-         * If the main app is the same origin OR if we just want a simpler solution,
-         * we open the main app, write to its localStorage via a same-origin
-         * impersonate.html served at its root. But since we can't guarantee that,
-         * we use the safest universal method: encode creds in URL hash, redirect.
+         * The /login?impersonate_token approach works regardless of origin:
+         * the Next.js login page reads the search params via useEffect and calls
+         * login(token, userData) which sets the correct localStorage entry there.
          */
 
         const userData = { id: userId, email };
         const encodedUser  = encodeURIComponent(JSON.stringify(userData));
         const encodedToken = encodeURIComponent(token);
 
-        // Build the impersonate redirect URL for the main app
+        // Build the impersonate redirect URL for the main app's login page
         const redirectUrl = `${appUrl}/login?impersonate_token=${encodedToken}&impersonate_user=${encodedUser}`;
 
         msgEl.innerHTML = `Logged in as <span class="email">${email}</span>. Redirecting to app…`;
 
         // Short delay so the user sees the confirmation
         await new Promise(r => setTimeout(r, 800));
-
-        // Try to set directly if same origin (file:// or same host)
-        try {
-          localStorage.setItem('token', token);
-          localStorage.setItem('user', JSON.stringify(userData));
-          // If we got here, same origin — go straight to vault
-          window.location.href = `${appUrl}/vault`;
-          return;
-        } catch (_) {
-          // Cross-origin, fallback to URL-based redirect
-        }
 
         window.location.href = redirectUrl;
       } catch (e) {

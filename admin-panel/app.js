@@ -9,18 +9,21 @@
 // ── State ─────────────────────────────────────────────────────────────────────
 let API_BASE = '';
 let ADMIN_SECRET = '';
+let APP_URL = '';
 let allUsers = [];
 let currentFilter = 'all';
 let currentModalUserId = null;
 
 // ── Persistence ───────────────────────────────────────────────────────────────
 function saveSession() {
-  sessionStorage.setItem('cv_admin_base', API_BASE);
+  sessionStorage.setItem('cv_admin_base',   API_BASE);
   sessionStorage.setItem('cv_admin_secret', ADMIN_SECRET);
+  sessionStorage.setItem('cv_admin_app',    APP_URL);
 }
 function loadSession() {
-  API_BASE = sessionStorage.getItem('cv_admin_base') || '';
+  API_BASE     = sessionStorage.getItem('cv_admin_base')   || '';
   ADMIN_SECRET = sessionStorage.getItem('cv_admin_secret') || '';
+  APP_URL      = sessionStorage.getItem('cv_admin_app')    || '';
 }
 
 // ── API helper ────────────────────────────────────────────────────────────────
@@ -49,8 +52,9 @@ async function doLogin() {
   const spinner = document.getElementById('login-spinner');
   const btnText = document.querySelector('#login-btn .btn-text');
 
-  API_BASE = urlInput.value.trim().replace(/\/$/, '');
+  API_BASE     = urlInput.value.trim().replace(/\/$/, '');
   ADMIN_SECRET = secretInput.value.trim();
+  APP_URL      = (document.getElementById('app-url').value || '').trim().replace(/\/$/, '') || API_BASE.replace(':8000', ':3000');
 
   errEl.classList.add('hidden');
   spinner.classList.remove('hidden');
@@ -295,12 +299,11 @@ async function quickLogin(userId, e) {
   e.stopPropagation();
   try {
     const res = await api(`/admin/users/${userId}/impersonate`, { method: 'POST' });
-    const appOrigin = API_BASE.replace(':8000', ':3000');
     const bridgeUrl = `impersonate.html`
       + `?token=${encodeURIComponent(res.access_token)}`
       + `&email=${encodeURIComponent(res.email)}`
       + `&id=${encodeURIComponent(res.user_id)}`
-      + `&app=${encodeURIComponent(appOrigin)}`;
+      + `&app=${encodeURIComponent(APP_URL)}`;
     showToast(`Opening app as ${res.email}`, 'success');
     window.open(bridgeUrl, '_blank');
   } catch (e) {
@@ -412,13 +415,11 @@ async function loginAsUser() {
   try {
     const res = await api(`/admin/users/${currentModalUserId}/impersonate`, { method: 'POST' });
 
-    // Derive main app origin from the API base (API is :8000, app is :3000)
-    const appOrigin = API_BASE.replace(':8000', ':3000');
     const bridgeUrl = `impersonate.html`
       + `?token=${encodeURIComponent(res.access_token)}`
       + `&email=${encodeURIComponent(res.email)}`
       + `&id=${encodeURIComponent(res.user_id)}`
-      + `&app=${encodeURIComponent(appOrigin)}`;
+      + `&app=${encodeURIComponent(APP_URL)}`;
 
     showToast(`Opening app as ${res.email} (expires in 2h)`, 'success');
     window.open(bridgeUrl, '_blank');
@@ -598,7 +599,8 @@ function fmtDate(iso) {
 (function init() {
   loadSession();
   if (API_BASE && ADMIN_SECRET) {
-    document.getElementById('api-url').value = API_BASE;
+    document.getElementById('api-url').value  = API_BASE;
+    document.getElementById('app-url').value  = APP_URL;
     doLogin();
   }
 })();
