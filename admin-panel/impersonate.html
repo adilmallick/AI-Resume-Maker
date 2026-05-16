@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Logging in as user…</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', system-ui, sans-serif;
+      background: #080b14;
+      color: #f1f5f9;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .card {
+      background: #161d2e;
+      border: 1px solid rgba(99,120,179,.25);
+      border-radius: 16px;
+      padding: 36px 40px;
+      text-align: center;
+      max-width: 420px;
+      width: 90vw;
+      box-shadow: 0 8px 40px rgba(0,0,0,.5);
+    }
+    .icon { font-size: 40px; margin-bottom: 16px; }
+    h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    p  { font-size: 13px; color: #94a3b8; line-height: 1.6; }
+    .email { color: #a5b4fc; font-weight: 600; }
+    .spinner {
+      width: 36px; height: 36px;
+      border: 3px solid rgba(99,102,241,.2);
+      border-top-color: #6366f1;
+      border-radius: 50%;
+      animation: spin .7s linear infinite;
+      margin: 20px auto 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .error { color: #fca5a5; background: rgba(239,68,68,.1); border-radius: 8px; padding: 10px 14px; font-size: 13px; margin-top: 12px; }
+    .btn {
+      display: inline-block; margin-top: 16px;
+      padding: 10px 24px; border-radius: 8px;
+      background: #6366f1; color: #fff; font-weight: 600; font-size: 14px;
+      cursor: pointer; text-decoration: none; border: none;
+    }
+    .btn:hover { filter: brightness(1.1); }
+  </style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="icon">⚡</div>
+    <h2>Impersonating user…</h2>
+    <p id="msg">Setting up session, please wait.</p>
+    <div class="spinner" id="spinner"></div>
+  </div>
+
+  <script>
+    /**
+     * Bridge page for admin impersonation.
+     * Reads ?token=...&email=...&app=... from the URL,
+     * opens the main app origin in a popup, posts the credentials,
+     * then redirects.
+     *
+     * URL params:
+     *   token  — the JWT
+     *   email  — user email (for the 'user' localStorage key)
+     *   id     — user id
+     *   app    — main app origin, e.g. http://localhost:3000
+     */
+    (async function () {
+      const params = new URLSearchParams(location.search);
+      const token  = params.get('token');
+      const email  = params.get('email');
+      const userId = params.get('id');
+      const appUrl = params.get('app') || 'http://localhost:3000';
+
+      const msgEl     = document.getElementById('msg');
+      const spinnerEl = document.getElementById('spinner');
+
+      function showError(msg) {
+        spinnerEl.style.display = 'none';
+        const err = document.createElement('div');
+        err.className = 'error';
+        err.textContent = msg;
+        document.getElementById('card').appendChild(err);
+
+        const btn = document.createElement('a');
+        btn.href = location.href.replace(location.pathname, '/index.html');
+        btn.className = 'btn';
+        btn.textContent = '← Back to Admin Panel';
+        document.getElementById('card').appendChild(btn);
+      }
+
+      if (!token || !email) {
+        showError('Missing token or email in URL. This link may be invalid.');
+        return;
+      }
+
+      msgEl.innerHTML = `Logging in as <span class="email">${email}</span>…`;
+
+      try {
+        /**
+         * Strategy: open a tiny hidden iframe pointing at the main app's origin,
+         * postMessage the credentials, let the app set localStorage, then redirect.
+         *
+         * BUT — localStorage is same-origin only.
+         * Since this page is served from a different origin (admin-panel port),
+         * we use window.open + postMessage approach OR we redirect with hash params
+         * and let the main app handle them.
+         *
+         * Simpler path: directly navigate to the main app with hash params.
+         * The main app login page reads them and sets localStorage.
+         * (Supported via the ?impersonate param we handle below in the redirect URL)
+         *
+         * If the main app is the same origin OR if we just want a simpler solution,
+         * we open the main app, write to its localStorage via a same-origin
+         * impersonate.html served at its root. But since we can't guarantee that,
+         * we use the safest universal method: encode creds in URL hash, redirect.
+         */
+
+        const userData = { id: userId, email };
+        const encodedUser  = encodeURIComponent(JSON.stringify(userData));
+        const encodedToken = encodeURIComponent(token);
+
+        // Build the impersonate redirect URL for the main app
+        const redirectUrl = `${appUrl}/login?impersonate_token=${encodedToken}&impersonate_user=${encodedUser}`;
+
+        msgEl.innerHTML = `Logged in as <span class="email">${email}</span>. Redirecting to app…`;
+
+        // Short delay so the user sees the confirmation
+        await new Promise(r => setTimeout(r, 800));
+
+        // Try to set directly if same origin (file:// or same host)
+        try {
+          localStorage.setItem('token', token);
+          localStorage.setItem('user', JSON.stringify(userData));
+          // If we got here, same origin — go straight to vault
+          window.location.href = `${appUrl}/vault`;
+          return;
+        } catch (_) {
+          // Cross-origin, fallback to URL-based redirect
+        }
+
+        window.location.href = redirectUrl;
+      } catch (e) {
+        showError(`Error: ${e.message}`);
+      }
+    })();
+  </script>
+</body>
+</html>

@@ -143,3 +143,20 @@ class Resume(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     application = relationship("JobApplication", back_populates="resume")
+
+
+class SystemConfig(Base):
+    """
+    Generic key-value store for server-side configuration.
+    Persists settings (like the active LLM provider) across restarts
+    without needing to touch the .env file.
+
+    Keys used:
+      llm_provider  — active LLM provider id (gemini, anthropic, groq, ollama, …)
+    """
+    __tablename__ = "system_config"
+
+    key        = Column(String(128), primary_key=True)
+    value      = Column(Text, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+

@@ -23,26 +23,47 @@ app = FastAPI(
 )
 
 # Allow origins from CORS_ORIGINS env var (comma-separated)
-_cors_origins_raw = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
-_cors_origins = [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
+# Admin panel origins are always allowed so the standalone admin panel can call the API
+# Set ALLOW_ALL_ORIGINS=true in dev to bypass CORS entirely (e.g. when opening admin panel as file://)
+_allow_all = os.getenv("ALLOW_ALL_ORIGINS", "false").lower() == "true"
+_cors_origins_raw = os.getenv(
+    "CORS_ORIGINS",
+    "http://localhost:3000,http://127.0.0.1:3000,http://localhost:5500,http://127.0.0.1:5500,http://localhost:5173"
+)
+_cors_origins = ["*"] if _allow_all else [o.strip() for o in _cors_origins_raw.split(",") if o.strip()]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_credentials=True,
+    allow_credentials=not _allow_all,  # credentials + wildcard is not allowed by spec
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
 
 # ── Routers ────────────────────────────────────────────────────────────────
 from auth.router import router as auth_router
 from api.routers import router as vault_router
 from api.resume_upload import router as resume_upload_router
+from api.admin import router as admin_router
 
 app.include_router(pdf_router)
 app.include_router(auth_router)
 app.include_router(vault_router)
 app.include_router(resume_upload_router)
+app.include_router(admin_router)
+
+# ── Startup: sync provider from DB ─────────────────────────────────────────
+from db.database import AsyncSessionLocal
+
+@app.on_event("startup")
+async def _on_startup():
+    """Load the active LLM provider from system_config on server start."""
+    async with AsyncSessionLocal() as db:
+        await app_state.load_from_db(db)
+    logger.info(f"[Startup] Active LLM provider: {app_state.provider_name}")
+
+
 
 class ScrapeRequest(BaseModel):
     url: str
@@ -98,62 +119,10 @@ class ATSScoreRequest(BaseModel):
     job_input: str
     resume_data: dict
 
-from ai.llm.ollama_provider import OllamaProvider
-from ai.llm.gemma_ollama_provider import GemmaOllamaProvider
-from ai.llm.llama_groq_provider import LlamaGroqProvider
-from ai.rag.embeddings import OllamaEmbeddings, HuggingFaceEmbeddings, KeywordEmbeddings
-from ai.rag.vector_store import InMemoryVectorStore
-from ai.rag.retriever import RAGRetriever
-from ai.pipeline import ResumePipeline
-
-
-# ── LLM Provider Factory ───────────────────────────────────────────────────
-# Set LLM_PROVIDER in your .env to switch providers without changing code.
-#
-#   LLM_PROVIDER=ollama        → OllamaProvider  (llama3.1:8b, default)
-#   LLM_PROVIDER=gemma_ollama  → GemmaOllamaProvider (gemma2:9b via Ollama)
-#   LLM_PROVIDER=groq          → LlamaGroqProvider   (llama-3.1-8b-instant via Groq API)
-#   LLM_PROVIDER=gemini        → GeminiProvider      (gemini-3-flash-preview)
-#   LLM_PROVIDER=anthropic     → AnthropicProvider   (claude-4-sonnet)
-#
-_provider_name = os.getenv("LLM_PROVIDER", "ollama").lower()
-
-if _provider_name == "groq":
-    llm_provider = LlamaGroqProvider()
-    logger.info("LLM Provider: Groq (llama-3.1-8b-instant)")
-elif _provider_name == "gemma_ollama":
-    llm_provider = GemmaOllamaProvider()
-    logger.info("LLM Provider: Ollama (gemma2:9b)")
-elif _provider_name == "gemini":
-    from ai.llm.gemini_provider import GeminiProvider
-    llm_provider = GeminiProvider(model="gemini-3-flash-preview")
-    logger.info("LLM Provider: Gemini (gemini-3-flash-preview)")
-elif _provider_name == "anthropic":
-    from ai.llm.anthropic_provider import AnthropicProvider
-    llm_provider = AnthropicProvider(model="claude-3-5-sonnet-20241022")
-    logger.info("LLM Provider: Anthropic (claude-3-5-sonnet-20241022)")
-else:
-    llm_provider = OllamaProvider(model="llama3.1:8b")
-    logger.info("LLM Provider: Ollama (llama3.1:8b)")
-
-# ── Embeddings — priority: HuggingFace API → Ollama → Keyword fallback ────────
-# 1. If HUGGINGFACE_API_KEY is set: use HuggingFace Inference API (free, good quality)
-# 2. Else if local Ollama provider: use OllamaEmbeddings (neural, local)
-# 3. Else: use KeywordEmbeddings (zero-dependency fallback, always works)
-_hf_api_key = os.getenv("HUGGINGFACE_API_KEY", "")
-if _hf_api_key:
-    embeddings = HuggingFaceEmbeddings(api_key=_hf_api_key)
-    logger.info("Embeddings: HuggingFace Inference API (all-MiniLM-L6-v2)")
-elif _provider_name in ("ollama", "gemma_ollama"):
-    embeddings = OllamaEmbeddings(model="nomic-embed-text")
-    logger.info("Embeddings: OllamaEmbeddings (nomic-embed-text)")
-else:
-    embeddings = KeywordEmbeddings()
-    logger.info("Embeddings: KeywordEmbeddings (zero-dependency fallback)")
-
-vector_store = InMemoryVectorStore(embeddings)
-retriever = RAGRetriever(vector_store)
-resume_pipeline = ResumePipeline(llm_provider, retriever)
+# ── App State (mutable LLM provider + pipeline) ───────────────────────────
+# Import the singleton — provider can be hot-swapped at runtime via /admin/config
+from app_state import state as app_state
+logger.info(f"LLM Provider (startup): {app_state.provider_name}")
 
 from auth.dependencies import get_current_user
 from fastapi import Depends
@@ -251,7 +220,7 @@ async def generate_resume_endpoint(
 
         # Run AI Pipeline with full context
         ai_response = await asyncio.to_thread(
-            resume_pipeline.generate,
+            app_state.pipeline.generate,
             job_description,
             candidate_skills,
             candidate_profile,
@@ -289,7 +258,7 @@ async def ats_score_endpoint(
                 f"Requirements:\n{', '.join(job_data.get('requirements', []))}"
             )
         
-        scorer = ATSScorer(keyword_extractor=resume_pipeline.extractor)
+        scorer = ATSScorer(keyword_extractor=app_state.pipeline.extractor)
         result = await asyncio.to_thread(scorer.score, request.resume_data, job_description)
         return result
     except Exception as e:
