@@ -46,7 +46,8 @@ export default function LoginPage() {
       });
 
       if (!res.ok) {
-        throw new Error('Invalid email or password');
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.detail || 'Invalid email or password');
       }
 
       const data = await res.json();
